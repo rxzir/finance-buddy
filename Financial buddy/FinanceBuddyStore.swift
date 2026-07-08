@@ -1,5 +1,5 @@
 //
-//  HeadroomStore.swift
+//  FinanceBuddyStore.swift
 //  Finance buddy
 //
 //  The single observable owner of the user's financial data. Views read
@@ -13,7 +13,7 @@ import Observation
 
 @MainActor
 @Observable
-final class HeadroomStore {
+final class FinanceBuddyStore {
     var finances: Finances {
         didSet { scheduleSave() }
     }

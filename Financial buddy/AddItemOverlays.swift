@@ -22,7 +22,7 @@ struct ModalOverlay<Content: View>: View {
 
     var body: some View {
         ZStack {
-            Color.hrInk.opacity(0.35)
+            Color.fbInk.opacity(0.35)
                 .ignoresSafeArea()
                 .onTapGesture(perform: onCancel)
 
@@ -31,35 +31,35 @@ struct ModalOverlay<Content: View>: View {
                 Card(cornerRadius: 22) {
                     VStack(alignment: .leading, spacing: 18) {
                         Text(title)
-                            .font(.hrHeader(20))
+                            .font(.fbHeader(20))
                             .tracking(-0.3)
-                            .foregroundStyle(Color.hrInk)
+                            .foregroundStyle(Color.fbInk)
 
                         content
 
                         HStack(spacing: 12) {
                             Button(action: onCancel) {
                                 Text("Cancel")
-                                    .font(.hrBody(16, weight: .semibold))
-                                    .foregroundStyle(Color.hrSoftText)
+                                    .font(.fbBody(16, weight: .semibold))
+                                    .foregroundStyle(Color.fbSoftText)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 14)
                                     .background(
                                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .fill(Color.hrBackground)
+                                            .fill(Color.fbBackground)
                                     )
                             }
                             .buttonStyle(.plain)
 
                             Button(action: onSave) {
                                 Text("Add")
-                                    .font(.hrBody(16, weight: .semibold))
-                                    .foregroundStyle(Color.hrCard)
+                                    .font(.fbBody(16, weight: .semibold))
+                                    .foregroundStyle(Color.fbOnAccent)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 14)
                                     .background(
                                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                            .fill(canSave ? Color.hrPositive : Color.hrHairline)
+                                            .fill(canSave ? Color.fbPositive : Color.fbHairline)
                                     )
                             }
                             .buttonStyle(.plain)
@@ -110,14 +110,14 @@ struct AddCommitmentOverlay: View {
                         ForEach(1...31, id: \.self) { Text("Day \($0)").tag($0) }
                     }
                     .pickerStyle(.menu)
-                    .tint(Color.hrInk)
+                    .tint(Color.fbInk)
                 }
                 LabeledField(label: "Category") {
                     Picker("", selection: $category) {
                         ForEach(categories, id: \.self) { Text($0).tag($0) }
                     }
                     .pickerStyle(.menu)
-                    .tint(Color.hrInk)
+                    .tint(Color.fbInk)
                 }
             }
         }
@@ -161,7 +161,7 @@ struct AddOneOffOverlay: View {
                     DatePicker("", selection: $date, displayedComponents: .date)
                         .labelsHidden()
                         .datePickerStyle(.compact)
-                        .tint(Color.hrPositive)
+                        .tint(Color.fbPositive)
                 }
             }
         }
@@ -182,8 +182,8 @@ struct LabeledField<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
-                .font(.hrBody(14))
-                .foregroundStyle(Color.hrSoftText)
+                .font(.fbBody(14))
+                .foregroundStyle(Color.fbSoftText)
             content
         }
     }
@@ -195,17 +195,17 @@ struct PlainTextField: View {
     var body: some View {
         TextField(placeholder, text: $text)
             .textFieldStyle(.plain)
-            .font(.hrBody(17, weight: .medium))
-            .foregroundStyle(Color.hrInk)
+            .font(.fbBody(17, weight: .medium))
+            .foregroundStyle(Color.fbInk)
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.hrBackground)
+                    .fill(Color.fbBackground)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.hrHairline, lineWidth: 1)
+                    .strokeBorder(Color.fbHairline, lineWidth: 1)
             )
     }
 }
@@ -216,30 +216,30 @@ struct CurrencyEntryField: View {
     var body: some View {
         HStack(spacing: 6) {
             Text(Money.currencySymbol)
-                .font(.hrNumber(20, weight: .semibold))
-                .foregroundStyle(Color.hrSoftText)
+                .font(.fbNumber(20, weight: .semibold))
+                .foregroundStyle(Color.fbSoftText)
             TextField("0", value: $value, format: .number.precision(.fractionLength(0...2)))
                 .textFieldStyle(.plain)
-                .font(.hrNumber(20, weight: .semibold))
-                .foregroundStyle(Color.hrInk)
+                .font(.fbNumber(20, weight: .semibold))
+                .foregroundStyle(Color.fbInk)
                 .decimalKeyboard()
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.hrBackground)
+                .fill(Color.fbBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.hrHairline, lineWidth: 1)
+                .strokeBorder(Color.fbHairline, lineWidth: 1)
         )
     }
 }
 
 #Preview("Add commitment") {
     ZStack {
-        Color.hrBackground.ignoresSafeArea()
+        Color.fbBackground.ignoresSafeArea()
         AddCommitmentOverlay(onCancel: {}, onSave: { _ in })
     }
 }

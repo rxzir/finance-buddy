@@ -22,19 +22,19 @@ struct SignInView: View {
 
     var body: some View {
         ZStack {
-            Color.hrBackground.ignoresSafeArea()
+            Color.fbBackground.ignoresSafeArea()
 
             VStack(spacing: 20) {
                 Spacer()
 
                 VStack(spacing: 6) {
                     Text("Finance buddy")
-                        .font(.hrHeader(28))
+                        .font(.fbHeader(28))
                         .tracking(-0.5)
-                        .foregroundStyle(Color.hrInk)
+                        .foregroundStyle(Color.fbInk)
                     Text(isSignUp ? "Create your account" : "Welcome back")
-                        .font(.hrBody(15))
-                        .foregroundStyle(Color.hrSoftText)
+                        .font(.fbBody(15))
+                        .foregroundStyle(Color.fbSoftText)
                 }
 
                 Card {
@@ -53,22 +53,22 @@ struct SignInView: View {
 
                         if let error = auth.errorMessage {
                             Text(error)
-                                .font(.hrBody(13))
-                                .foregroundStyle(Color.hrWarning)
+                                .font(.fbBody(13))
+                                .foregroundStyle(Color.fbWarning)
                         }
 
                         Button(action: submit) {
                             HStack {
-                                if auth.isWorking { ProgressView().tint(.hrCard) }
+                                if auth.isWorking { ProgressView().tint(.fbOnAccent) }
                                 Text(isSignUp ? "Create account" : "Sign in")
-                                    .font(.hrBody(16, weight: .semibold))
+                                    .font(.fbBody(16, weight: .semibold))
                             }
-                            .foregroundStyle(Color.hrCard)
+                            .foregroundStyle(Color.fbOnAccent)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                             .background(
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(canSubmit ? Color.hrPositive : Color.hrHairline)
+                                    .fill(canSubmit ? Color.fbPositive : Color.fbHairline)
                             )
                         }
                         .buttonStyle(.plain)
@@ -82,8 +82,8 @@ struct SignInView: View {
                 } label: {
                     Text(isSignUp ? "Have an account? Sign in"
                                   : "New here? Create an account")
-                        .font(.hrBody(14, weight: .medium))
-                        .foregroundStyle(Color.hrPositive)
+                        .font(.fbBody(14, weight: .medium))
+                        .foregroundStyle(Color.fbPositive)
                 }
                 .buttonStyle(.plain)
 
@@ -105,21 +105,21 @@ struct SignInView: View {
     private func field(_ text: Binding<String>, placeholder: String) -> some View {
         TextField(placeholder, text: text)
             .textFieldStyle(.plain)
-            .font(.hrBody(17, weight: .medium))
-            .foregroundStyle(Color.hrInk)
+            .font(.fbBody(17, weight: .medium))
+            .foregroundStyle(Color.fbInk)
             .padding(.horizontal, 14).padding(.vertical, 12)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.hrBackground))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.hrHairline, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.fbBackground))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.fbHairline, lineWidth: 1))
     }
 
     private func secureField(_ text: Binding<String>, placeholder: String) -> some View {
         SecureField(placeholder, text: text)
             .textFieldStyle(.plain)
-            .font(.hrBody(17, weight: .medium))
-            .foregroundStyle(Color.hrInk)
+            .font(.fbBody(17, weight: .medium))
+            .foregroundStyle(Color.fbInk)
             .padding(.horizontal, 14).padding(.vertical, 12)
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.hrBackground))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.hrHairline, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.fbBackground))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color.fbHairline, lineWidth: 1))
     }
 }
 #endif

@@ -56,24 +56,25 @@ final class ChatViewModel {
 // MARK: - View
 
 struct AskView: View {
-    let store: HeadroomStore
+    let store: FinanceBuddyStore
     @State private var model: ChatViewModel
     @State private var draft = ""
+    @State private var dictation = DictationController()
 
-    init(store: HeadroomStore) {
+    init(store: FinanceBuddyStore) {
         self.store = store
         _model = State(initialValue: ChatViewModel())
     }
 
     /// Used by previews to inject a pre-seeded conversation.
-    init(store: HeadroomStore, injectedModel: ChatViewModel) {
+    init(store: FinanceBuddyStore, injectedModel: ChatViewModel) {
         self.store = store
         _model = State(initialValue: injectedModel)
     }
 
     var body: some View {
         ZStack {
-            Color.hrBackground.ignoresSafeArea()
+            Color.fbBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 header
@@ -86,9 +87,9 @@ struct AskView: View {
     private var header: some View {
         HStack {
             Text("Ask")
-                .font(.hrHeader(28))
+                .font(.fbHeader(28))
                 .tracking(-0.5)
-                .foregroundStyle(Color.hrInk)
+                .foregroundStyle(Color.fbInk)
             Spacer()
         }
         .padding(.horizontal, 20)
@@ -123,38 +124,85 @@ struct AskView: View {
         }
     }
 
-    private var inputBar: some View {
-        HStack(spacing: 10) {
-            TextField("Can I afford…", text: $draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.hrBody(16))
-                .foregroundStyle(Color.hrInk)
-                .lineLimit(1...4)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .fill(Color.hrCard)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(Color.hrHairline, lineWidth: 1)
-                )
+    // MARK: Input — primary dictation, backup text field
 
-            Button(action: send) {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(Color.hrCard)
-                    .frame(width: 44, height: 44)
-                    .background(Circle().fill(canSend ? Color.hrPositive : Color.hrHairline))
+    private var inputBar: some View {
+        VStack(spacing: 14) {
+            if dictation.isRecording {
+                Text(dictation.transcript.isEmpty ? "Listening…" : dictation.transcript)
+                    .font(.fbBody(15))
+                    .foregroundStyle(dictation.transcript.isEmpty ? Color.fbSoftText : Color.fbInk)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
             }
-            .buttonStyle(.plain)
-            .disabled(!canSend)
+
+            if let error = dictation.errorMessage {
+                Text(error)
+                    .font(.fbBody(13))
+                    .foregroundStyle(Color.fbWarning)
+                    .padding(.horizontal, 20)
+            }
+
+            micButton
+
+            HStack(spacing: 10) {
+                TextField("…or type your question", text: $draft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.fbBody(16))
+                    .foregroundStyle(Color.fbInk)
+                    .lineLimit(1...4)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(Color.fbCard)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .strokeBorder(Color.fbHairline, lineWidth: 1)
+                    )
+
+                Button(action: send) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(Color.fbOnAccent)
+                        .frame(width: 44, height: 44)
+                        .background(Circle().fill(canSend ? Color.fbPositive : Color.fbHairline))
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSend)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 12)
-        .background(Color.hrBackground)
+        .background(Color.fbBackground)
+    }
+
+    /// The primary way in: tap to talk, tap again to send what was heard.
+    private var micButton: some View {
+        Button {
+            Task {
+                if let spoken = await dictation.toggle() {
+                    model.send(spoken, snapshot: store.finances)
+                }
+            }
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(dictation.isRecording ? Color.fbWarning : Color.fbPositive)
+                    .frame(width: 72, height: 72)
+                    .shadow(color: (dictation.isRecording ? Color.fbWarning : Color.fbPositive).opacity(0.35),
+                            radius: dictation.isRecording ? 18 : 10)
+                Image(systemName: dictation.isRecording ? "stop.fill" : "mic.fill")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(Color.fbOnAccent)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(model.isThinking)
+        .animation(.easeInOut(duration: 0.2), value: dictation.isRecording)
+        .accessibilityLabel(dictation.isRecording ? "Stop and send" : "Dictate a question")
     }
 
     private var canSend: Bool {
@@ -178,17 +226,17 @@ private struct MessageBubble: View {
             if message.role == .user { Spacer(minLength: 40) }
 
             Text(message.text)
-                .font(.hrBody(16))
-                .foregroundStyle(message.role == .user ? Color.hrCard : Color.hrInk)
+                .font(.fbBody(16))
+                .foregroundStyle(message.role == .user ? Color.fbOnAccent : Color.fbInk)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(message.role == .user ? Color.hrCommitment : Color.hrCard)
+                        .fill(message.role == .user ? Color.fbCommitment : Color.fbCard)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(Color.hrHairline,
+                        .strokeBorder(Color.fbHairline,
                                       lineWidth: message.role == .user ? 0 : 1)
                 )
 
@@ -204,7 +252,7 @@ private struct ThinkingBubble: View {
             HStack(spacing: 5) {
                 ForEach(0..<3) { i in
                     Circle()
-                        .fill(Color.hrSoftText)
+                        .fill(Color.fbSoftText)
                         .frame(width: 7, height: 7)
                         .opacity(phase == Double(i) ? 1 : 0.3)
                 }
@@ -212,11 +260,11 @@ private struct ThinkingBubble: View {
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.hrCard)
+                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.fbCard)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color.hrHairline, lineWidth: 1)
+                    .strokeBorder(Color.fbHairline, lineWidth: 1)
             )
             Spacer(minLength: 40)
         }
@@ -230,7 +278,7 @@ private struct ThinkingBubble: View {
 
 #Preview {
     // Seed a short conversation so the preview shows real bubbles.
-    let store = HeadroomStore(finances: .sample)
+    let store = FinanceBuddyStore(finances: .sample)
     let model = ChatViewModel()
     model.messages.append(ChatMessage(role: .user, text: "Can I afford a £380/month car payment?"))
     model.messages.append(ChatMessage(role: .assistant,
@@ -240,7 +288,7 @@ private struct ThinkingBubble: View {
 
 /// Small wrapper so the preview can inject a pre-seeded view model.
 private struct AskViewPreview: View {
-    let store: HeadroomStore
+    let store: FinanceBuddyStore
     let model: ChatViewModel
     var body: some View {
         AskView(store: store, injectedModel: model)

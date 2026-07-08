@@ -10,23 +10,27 @@ import SwiftUI
 
 // MARK: - Palette
 
+// Dark theme. Same semantic roles as the original light palette, tuned
+// for dark surfaces (greens brightened, ink inverted to near-white).
 extension Color {
-    /// App background — muted sage. #EEF1EC
-    static let hrBackground = Color(hex: 0xEEF1EC)
-    /// Card surface. #FFFFFF
-    static let hrCard = Color(hex: 0xFFFFFF)
-    /// Primary text / hero numbers. #1B2521
-    static let hrInk = Color(hex: 0x1B2521)
-    /// Secondary / supporting text. #5C6960
-    static let hrSoftText = Color(hex: 0x5C6960)
-    /// Hairline dividers & borders. #D3DBD1
-    static let hrHairline = Color(hex: 0xD3DBD1)
-    /// Positive / headroom. #2F6F4E
-    static let hrPositive = Color(hex: 0x2F6F4E)
-    /// Warning / overspend. #A84B2A
-    static let hrWarning = Color(hex: 0xA84B2A)
-    /// Commitments in the "eaten" bar. #2B3A67
-    static let hrCommitment = Color(hex: 0x2B3A67)
+    /// App background — deep green-black. #121714
+    static let fbBackground = Color(hex: 0x121714)
+    /// Card surface — a step lighter than the background. #1C2420
+    static let fbCard = Color(hex: 0x1C2420)
+    /// Primary text / hero numbers. #E9EFEA
+    static let fbInk = Color(hex: 0xE9EFEA)
+    /// Secondary / supporting text. #9AA79E
+    static let fbSoftText = Color(hex: 0x9AA79E)
+    /// Hairline dividers & borders. #2C362F
+    static let fbHairline = Color(hex: 0x2C362F)
+    /// Positive / headroom — brightened for dark surfaces. #4FAE7F
+    static let fbPositive = Color(hex: 0x4FAE7F)
+    /// Warning / overspend — brightened for dark surfaces. #D97D52
+    static let fbWarning = Color(hex: 0xD97D52)
+    /// Commitments in the "eaten" bar — lifted so segments read on dark. #8CA0D9
+    static let fbCommitment = Color(hex: 0x8CA0D9)
+    /// Text/icons placed on filled accent surfaces (buttons, user bubble).
+    static let fbOnAccent = Color(hex: 0x0F1512)
 
     init(hex: UInt32, opacity: Double = 1.0) {
         let r = Double((hex >> 16) & 0xFF) / 255.0
@@ -41,17 +45,17 @@ extension Color {
 extension Font {
     /// Geometric sans headers: bold, slightly tight tracking is applied
     /// separately via `.tracking()` on the Text.
-    static func hrHeader(_ size: CGFloat) -> Font {
+    static func fbHeader(_ size: CGFloat) -> Font {
         .system(size: size, weight: .bold, design: .rounded)
     }
 
     /// Monospaced numerals for anything financial (SF Mono stand-in).
-    static func hrNumber(_ size: CGFloat, weight: Font.Weight = .medium) -> Font {
+    static func fbNumber(_ size: CGFloat, weight: Font.Weight = .medium) -> Font {
         .system(size: size, weight: weight, design: .monospaced)
     }
 
     /// Body / supporting text.
-    static func hrBody(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+    static func fbBody(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .rounded)
     }
 }
@@ -104,11 +108,11 @@ struct Card<Content: View>: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Color.hrCard)
+                    .fill(Color.fbCard)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.hrHairline, lineWidth: 1)
+                    .strokeBorder(Color.fbHairline, lineWidth: 1)
             )
     }
 }

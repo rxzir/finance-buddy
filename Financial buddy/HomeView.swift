@@ -28,7 +28,7 @@ struct HomeView: View {
             .padding(.top, 8)
             .padding(.bottom, 24)
         }
-        .background(Color.hrBackground)
+        .background(Color.fbBackground)
     }
 
     // MARK: Hero
@@ -36,13 +36,13 @@ struct HomeView: View {
     private var hero: some View {
         VStack(spacing: 6) {
             Text("SAFE TO SPEND TODAY")
-                .font(.hrBody(13, weight: .semibold))
+                .font(.fbBody(13, weight: .semibold))
                 .tracking(1.5)
-                .foregroundStyle(Color.hrSoftText)
+                .foregroundStyle(Color.fbSoftText)
 
             Text(Money.string(safe))
-                .font(.hrNumber(52, weight: .bold))
-                .foregroundStyle(isOverspent ? Color.hrWarning : Color.hrInk)
+                .font(.fbNumber(52, weight: .bold))
+                .foregroundStyle(isOverspent ? Color.fbWarning : Color.fbInk)
                 .minimumScaleFactor(0.5)
                 .lineLimit(1)
 
@@ -50,9 +50,9 @@ struct HomeView: View {
                 Image(systemName: "calendar")
                     .font(.system(size: 13, weight: .semibold))
                 Text(days == 0 ? "Payday is today" : "\(days) day\(days == 1 ? "" : "s") until payday")
-                    .font(.hrBody(15, weight: .medium))
+                    .font(.fbBody(15, weight: .medium))
             }
-            .foregroundStyle(Color.hrSoftText)
+            .foregroundStyle(Color.fbSoftText)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
@@ -65,19 +65,19 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     Text("Balance")
-                        .font(.hrHeader(18))
+                        .font(.fbHeader(18))
                         .tracking(-0.3)
-                        .foregroundStyle(Color.hrInk)
+                        .foregroundStyle(Color.fbInk)
                     Spacer()
                     Text(Money.string(finances.balance))
-                        .font(.hrNumber(18, weight: .semibold))
-                        .foregroundStyle(Color.hrInk)
+                        .font(.fbNumber(18, weight: .semibold))
+                        .foregroundStyle(Color.fbInk)
                 }
                 Text("What's already spoken for before payday")
-                    .font(.hrBody(14))
-                    .foregroundStyle(Color.hrSoftText)
+                    .font(.fbBody(14))
+                    .foregroundStyle(Color.fbSoftText)
 
-                HeadroomBar(balance: finances.balance,
+                BalanceBar(balance: finances.balance,
                             obligations: obligations,
                             safeToSpend: safe)
             }
@@ -95,15 +95,15 @@ struct HomeView: View {
 
                 if obligations.isEmpty {
                     Text("Nothing due before payday.")
-                        .font(.hrBody(14))
-                        .foregroundStyle(Color.hrSoftText)
+                        .font(.fbBody(14))
+                        .foregroundStyle(Color.fbSoftText)
                 } else {
                     ForEach(obligations) { ob in
                         breakdownRow(label: ob.name, value: -ob.amount, muted: true)
                     }
                 }
 
-                Divider().overlay(Color.hrHairline)
+                Divider().overlay(Color.fbHairline)
 
                 breakdownRow(label: isOverspent ? "Overspent" : "Safe to spend",
                              value: safe,
@@ -124,13 +124,13 @@ struct HomeView: View {
                              value: -finances.recurringCommitments.reduce(0) { $0 + $1.amount },
                              muted: true)
 
-                Divider().overlay(Color.hrHairline)
+                Divider().overlay(Color.fbHairline)
 
                 breakdownRow(label: "Headroom", value: finances.monthlyHeadroom, emphasis: true)
 
                 Text("What's left each month once every regular commitment is paid.")
-                    .font(.hrBody(13))
-                    .foregroundStyle(Color.hrSoftText)
+                    .font(.fbBody(13))
+                    .foregroundStyle(Color.fbSoftText)
                     .padding(.top, 2)
             }
         }
@@ -142,11 +142,11 @@ struct HomeView: View {
         HStack(spacing: 8) {
             Image(systemName: systemImage)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color.hrSoftText)
+                .foregroundStyle(Color.fbSoftText)
             Text(text)
-                .font(.hrHeader(17))
+                .font(.fbHeader(17))
                 .tracking(-0.3)
-                .foregroundStyle(Color.hrInk)
+                .foregroundStyle(Color.fbInk)
         }
     }
 
@@ -156,19 +156,19 @@ struct HomeView: View {
                               emphasis: Bool = false) -> some View {
         HStack {
             Text(label)
-                .font(.hrBody(emphasis ? 16 : 15, weight: emphasis ? .semibold : .regular))
-                .foregroundStyle(muted ? Color.hrSoftText : Color.hrInk)
+                .font(.fbBody(emphasis ? 16 : 15, weight: emphasis ? .semibold : .regular))
+                .foregroundStyle(muted ? Color.fbSoftText : Color.fbInk)
             Spacer()
             Text(Money.string(value, showsSign: muted))
-                .font(.hrNumber(emphasis ? 17 : 15, weight: emphasis ? .bold : .regular))
+                .font(.fbNumber(emphasis ? 17 : 15, weight: emphasis ? .bold : .regular))
                 .foregroundStyle(color(for: value, muted: muted, emphasis: emphasis))
         }
     }
 
     private func color(for value: Double, muted: Bool, emphasis: Bool) -> Color {
-        if emphasis { return value < 0 ? Color.hrWarning : Color.hrPositive }
-        if muted { return Color.hrSoftText }
-        return Color.hrInk
+        if emphasis { return value < 0 ? Color.fbWarning : Color.fbPositive }
+        if muted { return Color.fbSoftText }
+        return Color.fbInk
     }
 }
 

@@ -16,22 +16,22 @@ struct LockView: View {
 
             Image(systemName: "lock.fill")
                 .font(.system(size: 44, weight: .bold))
-                .foregroundStyle(Color.hrPositive)
+                .foregroundStyle(Color.fbPositive)
 
             VStack(spacing: 6) {
                 Text("Finance buddy")
-                    .font(.hrHeader(26))
+                    .font(.fbHeader(26))
                     .tracking(-0.5)
-                    .foregroundStyle(Color.hrInk)
+                    .foregroundStyle(Color.fbInk)
                 Text("Locked for your eyes only.")
-                    .font(.hrBody(15))
-                    .foregroundStyle(Color.hrSoftText)
+                    .font(.fbBody(15))
+                    .foregroundStyle(Color.fbSoftText)
             }
 
             if let error = lock.lastError {
                 Text(error)
-                    .font(.hrBody(13))
-                    .foregroundStyle(Color.hrWarning)
+                    .font(.fbBody(13))
+                    .foregroundStyle(Color.fbWarning)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
             }
@@ -42,13 +42,13 @@ struct LockView: View {
                 Task { await lock.authenticate() }
             } label: {
                 Text("Unlock with \(lock.biometryName)")
-                    .font(.hrBody(16, weight: .semibold))
-                    .foregroundStyle(Color.hrCard)
+                    .font(.fbBody(16, weight: .semibold))
+                    .foregroundStyle(Color.fbOnAccent)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.hrPositive)
+                            .fill(Color.fbPositive)
                     )
             }
             .buttonStyle(.plain)
@@ -57,7 +57,7 @@ struct LockView: View {
             .padding(.bottom, 32)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.hrBackground)
+        .background(Color.fbBackground)
     }
 }
 

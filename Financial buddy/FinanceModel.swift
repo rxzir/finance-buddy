@@ -1,5 +1,5 @@
 //
-//  HeadroomModel.swift
+//  FinanceModel.swift
 //  Finance buddy
 //
 //  Pure data model + calculations. No SwiftUI, no side effects.

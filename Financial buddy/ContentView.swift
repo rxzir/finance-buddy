@@ -2,17 +2,18 @@
 //  ContentView.swift
 //  Finance buddy
 //
-//  Root of the app: the biometric lock gate, then the custom three-tab
+//  Root of the app: the biometric lock gate, then the custom tab
 //  interface. Deliberately no TabView / NavigationStack — the tab bar is a
 //  plain HStack of buttons so iOS 26's Liquid Glass can't restyle it.
+//  Ask is the landing tab.
 //
 
 import SwiftUI
 
 struct ContentView: View {
-    @State private var store: HeadroomStore
+    @State private var store: FinanceBuddyStore
     @State private var lock = AppLock()
-    @State private var tab: Tab = .home
+    @State private var tab: Tab = .ask
     #if canImport(Supabase)
     @State private var auth = SupabaseAuthModel()
     #endif
@@ -22,15 +23,15 @@ struct ContentView: View {
         // sign-in, so start empty. Otherwise seed sample data so the app is
         // usable out of the box.
         #if canImport(Supabase)
-        _store = State(initialValue: HeadroomStore(finances: .empty))
+        _store = State(initialValue: FinanceBuddyStore(finances: .empty))
         #else
-        _store = State(initialValue: HeadroomStore(finances: .sample))
+        _store = State(initialValue: FinanceBuddyStore(finances: .sample))
         #endif
     }
 
     var body: some View {
         ZStack {
-            Color.hrBackground.ignoresSafeArea()
+            Color.fbBackground.ignoresSafeArea()
 
             if lock.isUnlocked {
                 postUnlock
@@ -42,6 +43,7 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: lock.isUnlocked)
         .task { await lock.authenticate() }
+        .preferredColorScheme(.dark) // dark theme: keep system controls in step
     }
 
     /// After the biometric gate: sign-in (Supabase) then the main interface.
@@ -50,7 +52,7 @@ struct ContentView: View {
         #if canImport(Supabase)
         if !auth.isReady {
             ProgressView()
-                .tint(Color.hrPositive)
+                .tint(Color.fbPositive)
                 .task { await auth.restore() }
         } else if !auth.isSignedIn {
             SignInView(auth: auth)
@@ -75,9 +77,10 @@ struct ContentView: View {
         VStack(spacing: 0) {
             Group {
                 switch tab {
-                case .home:   HomeView(finances: store.finances)
-                case .manage: ManageView(store: store)
-                case .ask:    AskView(store: store)
+                case .ask:     AskView(store: store)
+                case .home:    HomeView(finances: store.finances)
+                case .manage:  ManageView(store: store)
+                case .profile: profileView
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -85,26 +88,42 @@ struct ContentView: View {
             CustomTabBar(selection: $tab)
         }
     }
+
+    @ViewBuilder
+    private var profileView: some View {
+        #if canImport(Supabase)
+        ProfileView(email: auth.email) {
+            await auth.signOut()
+            // Drop the local copy of the signed-out user's data.
+            store.persistence = nil
+            store.finances = .empty
+        }
+        #else
+        ProfileView(email: nil, onSignOut: nil)
+        #endif
+    }
 }
 
 // MARK: - Tabs
 
 enum Tab: CaseIterable {
-    case home, manage, ask
+    case ask, home, manage, profile
 
     var title: String {
         switch self {
-        case .home:   return "Home"
-        case .manage: return "Manage"
-        case .ask:    return "Ask"
+        case .ask:     return "Ask"
+        case .home:    return "Home"
+        case .manage:  return "Manage"
+        case .profile: return "Profile"
         }
     }
 
     var icon: String {
         switch self {
-        case .home:   return "chart.bar.fill"
-        case .manage: return "slider.horizontal.3"
-        case .ask:    return "bubble.left.and.bubble.right.fill"
+        case .ask:     return "bubble.left.and.bubble.right.fill"
+        case .home:    return "chart.bar.fill"
+        case .manage:  return "slider.horizontal.3"
+        case .profile: return "person.crop.circle"
         }
     }
 }
@@ -123,14 +142,14 @@ struct CustomTabBar: View {
                         Image(systemName: tab.icon)
                             .font(.system(size: 20, weight: .semibold))
                         Text(tab.title)
-                            .font(.hrBody(11, weight: .semibold))
+                            .font(.fbBody(11, weight: .semibold))
                     }
-                    .foregroundStyle(selection == tab ? Color.hrPositive : Color.hrSoftText)
+                    .foregroundStyle(selection == tab ? Color.fbPositive : Color.fbSoftText)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
                     .background(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(selection == tab ? Color.hrPositive.opacity(0.12) : .clear)
+                            .fill(selection == tab ? Color.fbPositive.opacity(0.12) : .clear)
                     )
                 }
                 .buttonStyle(.plain)
@@ -139,11 +158,11 @@ struct CustomTabBar: View {
         .padding(6)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.hrCard)
+                .fill(Color.fbCard)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Color.hrHairline, lineWidth: 1)
+                .strokeBorder(Color.fbHairline, lineWidth: 1)
         )
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -158,21 +177,23 @@ struct CustomTabBar: View {
     // Shows the main interface (bypassing the lock) so the custom tab bar
     // is visible composed with a screen.
     struct ShellPreview: View {
-        @State private var tab: Tab = .home
-        let store = HeadroomStore(finances: .sample)
+        @State private var tab: Tab = .ask
+        let store = FinanceBuddyStore(finances: .sample)
         var body: some View {
             VStack(spacing: 0) {
                 Group {
                     switch tab {
-                    case .home:   HomeView(finances: store.finances)
-                    case .manage: ManageView(store: store)
-                    case .ask:    AskView(store: store)
+                    case .ask:     AskView(store: store)
+                    case .home:    HomeView(finances: store.finances)
+                    case .manage:  ManageView(store: store)
+                    case .profile: ProfileView(email: "preview@example.com", onSignOut: {})
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 CustomTabBar(selection: $tab)
             }
-            .background(Color.hrBackground)
+            .background(Color.fbBackground)
+            .preferredColorScheme(.dark)
         }
     }
     return ShellPreview()

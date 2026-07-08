@@ -10,7 +10,7 @@
 import SwiftUI
 
 struct ManageView: View {
-    @Bindable var store: HeadroomStore
+    @Bindable var store: FinanceBuddyStore
 
     /// Which inline editor overlay, if any, is showing.
     enum Editor: Identifiable {
@@ -22,7 +22,7 @@ struct ManageView: View {
 
     var body: some View {
         ZStack {
-            Color.hrBackground.ignoresSafeArea()
+            Color.fbBackground.ignoresSafeArea()
 
             ScrollView {
                 VStack(spacing: 16) {
@@ -49,9 +49,9 @@ struct ManageView: View {
     private var header: some View {
         HStack {
             Text("Manage")
-                .font(.hrHeader(28))
+                .font(.fbHeader(28))
                 .tracking(-0.5)
-                .foregroundStyle(Color.hrInk)
+                .foregroundStyle(Color.fbInk)
             Spacer()
         }
         .padding(.top, 4)
@@ -76,19 +76,19 @@ struct ManageView: View {
                 fieldTitle("Income")
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Amount per pay")
-                        .font(.hrBody(14))
-                        .foregroundStyle(Color.hrSoftText)
+                        .font(.fbBody(14))
+                        .foregroundStyle(Color.fbSoftText)
                     CurrencyField(value: $store.finances.income.amount)
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Next pay date")
-                        .font(.hrBody(14))
-                        .foregroundStyle(Color.hrSoftText)
+                        .font(.fbBody(14))
+                        .foregroundStyle(Color.fbSoftText)
                     DatePicker("", selection: $store.finances.income.nextPayDate,
                                displayedComponents: .date)
                         .labelsHidden()
                         .datePickerStyle(.compact)
-                        .tint(Color.hrPositive)
+                        .tint(Color.fbPositive)
                 }
             }
         }
@@ -168,24 +168,24 @@ struct ManageView: View {
 
     private func fieldTitle(_ text: String) -> some View {
         Text(text)
-            .font(.hrHeader(17))
+            .font(.fbHeader(17))
             .tracking(-0.3)
-            .foregroundStyle(Color.hrInk)
+            .foregroundStyle(Color.fbInk)
     }
 
     private func emptyHint(_ text: String) -> some View {
         Text(text)
-            .font(.hrBody(14))
-            .foregroundStyle(Color.hrSoftText)
+            .font(.fbBody(14))
+            .foregroundStyle(Color.fbSoftText)
     }
 
     private func addButton(_ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: "plus")
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color.hrCard)
+                .foregroundStyle(Color.fbOnAccent)
                 .frame(width: 30, height: 30)
-                .background(Circle().fill(Color.hrPositive))
+                .background(Circle().fill(Color.fbPositive))
         }
         .buttonStyle(.plain)
     }
@@ -195,20 +195,20 @@ struct ManageView: View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
-                    .font(.hrBody(16, weight: .medium))
-                    .foregroundStyle(Color.hrInk)
+                    .font(.fbBody(16, weight: .medium))
+                    .foregroundStyle(Color.fbInk)
                 Text(detail)
-                    .font(.hrBody(13))
-                    .foregroundStyle(Color.hrSoftText)
+                    .font(.fbBody(13))
+                    .foregroundStyle(Color.fbSoftText)
             }
             Spacer()
             Text(Money.string(amount))
-                .font(.hrNumber(16, weight: .medium))
-                .foregroundStyle(Color.hrInk)
+                .font(.fbNumber(16, weight: .medium))
+                .foregroundStyle(Color.fbInk)
             Button(action: onDelete) {
                 Image(systemName: "minus.circle.fill")
                     .font(.system(size: 20))
-                    .foregroundStyle(Color.hrWarning.opacity(0.85))
+                    .foregroundStyle(Color.fbWarning.opacity(0.85))
             }
             .buttonStyle(.plain)
         }
@@ -225,23 +225,23 @@ struct CurrencyField: View {
     var body: some View {
         HStack(spacing: 6) {
             Text(Money.currencySymbol)
-                .font(.hrNumber(22, weight: .semibold))
-                .foregroundStyle(Color.hrSoftText)
+                .font(.fbNumber(22, weight: .semibold))
+                .foregroundStyle(Color.fbSoftText)
             TextField("0", value: $value, format: .number.precision(.fractionLength(0...2)))
                 .textFieldStyle(.plain)
-                .font(.hrNumber(22, weight: .semibold))
-                .foregroundStyle(Color.hrInk)
+                .font(.fbNumber(22, weight: .semibold))
+                .foregroundStyle(Color.fbInk)
                 .decimalKeyboard()
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.hrBackground)
+                .fill(Color.fbBackground)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.hrHairline, lineWidth: 1)
+                .strokeBorder(Color.fbHairline, lineWidth: 1)
         )
     }
 }
@@ -256,5 +256,5 @@ extension Money {
 }
 
 #Preview {
-    ManageView(store: HeadroomStore(finances: .sample))
+    ManageView(store: FinanceBuddyStore(finances: .sample))
 }

@@ -1,5 +1,5 @@
 //
-//  HeadroomBar.swift
+//  BalanceBar.swift
 //  Finance buddy
 //
 //  The signature visual: a horizontal bar the full width of which is the
@@ -9,7 +9,7 @@
 
 import SwiftUI
 
-struct HeadroomBar: View {
+struct BalanceBar: View {
     let balance: Double
     let obligations: [Obligation]
     let safeToSpend: Double
@@ -30,7 +30,7 @@ struct HeadroomBar: View {
     private func shade(for index: Int) -> Color {
         let steps = max(obligations.count - 1, 1)
         let t = Double(index) / Double(steps)          // 0...1
-        return Color.hrCommitment.opacity(1.0 - t * 0.45)
+        return Color.fbCommitment.opacity(1.0 - t * 0.45)
     }
 
     var body: some View {
@@ -46,7 +46,7 @@ struct HeadroomBar: View {
 
                     if !isOverspent {
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color.hrPositive)
+                            .fill(Color.fbPositive)
                             .frame(width: max(2, segmentWidth(safeToSpend, in: width)))
                     }
                 }
@@ -68,8 +68,8 @@ struct HeadroomBar: View {
             ForEach(Array(obligations.enumerated()), id: \.element.id) { index, ob in
                 legendRow(swatch: shade(for: index), name: ob.name, amount: ob.amount)
             }
-            Divider().overlay(Color.hrHairline)
-            legendRow(swatch: isOverspent ? .hrWarning : .hrPositive,
+            Divider().overlay(Color.fbHairline)
+            legendRow(swatch: isOverspent ? .fbWarning : .fbPositive,
                       name: isOverspent ? "Overspent" : "Safe to spend",
                       amount: safeToSpend,
                       emphasised: true)
@@ -82,12 +82,12 @@ struct HeadroomBar: View {
                 .fill(swatch)
                 .frame(width: 12, height: 12)
             Text(name)
-                .font(.hrBody(15, weight: emphasised ? .semibold : .regular))
-                .foregroundStyle(Color.hrInk)
+                .font(.fbBody(15, weight: emphasised ? .semibold : .regular))
+                .foregroundStyle(Color.fbInk)
             Spacer()
             Text(Money.string(amount))
-                .font(.hrNumber(15, weight: emphasised ? .semibold : .regular))
-                .foregroundStyle(emphasised ? (amount < 0 ? Color.hrWarning : Color.hrPositive) : Color.hrSoftText)
+                .font(.fbNumber(15, weight: emphasised ? .semibold : .regular))
+                .foregroundStyle(emphasised ? (amount < 0 ? Color.fbWarning : Color.fbPositive) : Color.fbSoftText)
         }
     }
 }
@@ -96,12 +96,12 @@ struct HeadroomBar: View {
     let f = Finances.sample
     return VStack {
         Card {
-            HeadroomBar(balance: f.balance,
+            BalanceBar(balance: f.balance,
                         obligations: f.upcomingObligations(),
                         safeToSpend: f.safeToSpendToday())
         }
         .padding()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Color.hrBackground)
+    .background(Color.fbBackground)
 }
