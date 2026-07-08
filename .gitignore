@@ -13,3 +13,7 @@ DerivedData/
 # SPM
 .swiftpm/
 .build/
+
+# Secrets — copy SupabaseSecrets.swift.example to SupabaseSecrets.swift
+Financial buddy/SupabaseSecrets.swift
+SupabaseSecrets.swift

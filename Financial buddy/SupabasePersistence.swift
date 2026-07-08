@@ -18,9 +18,10 @@ import Supabase
 // MARK: - Configuration
 
 enum SupabaseConfig {
-    /// From Supabase dashboard → Project Settings → API.
-    static let url = URL(string: "https://YOUR-PROJECT.supabase.co")!
-    static let anonKey = "YOUR-ANON-PUBLISHABLE-KEY"
+    /// Values live in the git-ignored SupabaseSecrets.swift — see
+    /// SupabaseSecrets.swift.example for the template.
+    static let url = SupabaseSecrets.projectURL
+    static let anonKey = SupabaseSecrets.anonKey
 
     static let client = SupabaseClient(supabaseURL: url, supabaseKey: anonKey)
 }
