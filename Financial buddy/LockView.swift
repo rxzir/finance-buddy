@@ -1,0 +1,66 @@
+//
+//  LockView.swift
+//  Finance buddy
+//
+//  The screen shown until the user passes the biometric / passcode gate.
+//
+
+import SwiftUI
+
+struct LockView: View {
+    @Bindable var lock: AppLock
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+
+            Image(systemName: "lock.fill")
+                .font(.system(size: 44, weight: .bold))
+                .foregroundStyle(Color.hrPositive)
+
+            VStack(spacing: 6) {
+                Text("Finance buddy")
+                    .font(.hrHeader(26))
+                    .tracking(-0.5)
+                    .foregroundStyle(Color.hrInk)
+                Text("Locked for your eyes only.")
+                    .font(.hrBody(15))
+                    .foregroundStyle(Color.hrSoftText)
+            }
+
+            if let error = lock.lastError {
+                Text(error)
+                    .font(.hrBody(13))
+                    .foregroundStyle(Color.hrWarning)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+            }
+
+            Spacer()
+
+            Button {
+                Task { await lock.authenticate() }
+            } label: {
+                Text("Unlock with \(lock.biometryName)")
+                    .font(.hrBody(16, weight: .semibold))
+                    .foregroundStyle(Color.hrCard)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.hrPositive)
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(lock.isAuthenticating)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.hrBackground)
+    }
+}
+
+#Preview {
+    LockView(lock: AppLock())
+}

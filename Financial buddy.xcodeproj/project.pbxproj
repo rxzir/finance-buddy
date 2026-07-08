@@ -94,6 +94,9 @@
 			);
 			mainGroup = 718C85152FFEAE9300B000AA;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				718C85482FFEC2E700B000AA /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 718C851F2FFEAE9300B000AA /* Products */;
 			projectDirPath = "";
@@ -351,6 +354,17 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		718C85482FFEC2E700B000AA /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 	};
 	rootObject = 718C85162FFEAE9300B000AA /* Project object */;
 }
