@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Finance buddy</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Finance buddy locks your financial data behind Face ID so only you can see it.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Your voice is transcribed on-device so you can ask questions hands-free.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>The microphone is used to dictate questions on the Ask tab.</string>
+</dict>
+</plist>
