@@ -14,9 +14,22 @@
 		718C851E2FFEAE9300B000AA /* Financial buddy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Financial buddy.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		718C855C2FFF205700B000AA /* Exceptions for "Financial buddy" folder in "Financial buddy" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 718C851D2FFEAE9300B000AA /* Financial buddy */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		718C85202FFEAE9300B000AA /* Financial buddy */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				718C855C2FFF205700B000AA /* Exceptions for "Financial buddy" folder in "Financial buddy" target */,
+			);
 			path = "Financial buddy";
 			sourceTree = "<group>";
 		};

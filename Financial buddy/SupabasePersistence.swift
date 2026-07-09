@@ -27,7 +27,12 @@ enum SupabaseConfig {
         supabaseURL: url,
         supabaseKey: anonKey,
         options: SupabaseClientOptions(
-            db: .init(encoder: postgrestEncoder, decoder: postgrestDecoder)
+            db: .init(encoder: postgrestEncoder, decoder: postgrestDecoder),
+            // Opt in to the SDK's future session behavior; silences its
+            // runtime notice. We read auth.session directly (which
+            // validates/refreshes), so the emitted initial session's
+            // validity doesn't affect us.
+            auth: .init(emitLocalSessionAsInitialSession: true)
         )
     )
 
