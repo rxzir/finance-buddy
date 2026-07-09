@@ -169,6 +169,40 @@ extension Finances {
         return result.sorted { $0.date < $1.date }
     }
 
+    /// The full forward schedule — every recurring commitment's next
+    /// occurrence and every future one-off, merged and sorted by date.
+    /// Unlike `upcomingObligations` this is not limited to the pre-payday
+    /// window; the view splits it at payday.
+    func upcomingSchedule(asOf today: Date = Date(),
+                          calendar: Calendar = .current) -> [Obligation] {
+        let start = calendar.startOfDay(for: today)
+        var result: [Obligation] = []
+
+        for commitment in recurringCommitments {
+            let occurrence = Finances.nextOccurrence(ofDueDay: commitment.dueDay,
+                                                     onOrAfter: start,
+                                                     calendar: calendar)
+            result.append(Obligation(id: commitment.id,
+                                     name: commitment.name,
+                                     amount: commitment.amount,
+                                     date: occurrence,
+                                     kind: .recurring(commitment)))
+        }
+
+        for cost in oneOffCosts {
+            let day = calendar.startOfDay(for: cost.date)
+            if day >= start {
+                result.append(Obligation(id: cost.id,
+                                         name: cost.name,
+                                         amount: cost.amount,
+                                         date: day,
+                                         kind: .oneOff(cost)))
+            }
+        }
+
+        return result.sorted { $0.date < $1.date }
+    }
+
     /// Balance minus every obligation that lands before (and including)
     /// payday. This is the hero number.
     func safeToSpendToday(asOf today: Date = Date(),

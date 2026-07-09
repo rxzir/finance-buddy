@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var store: FinanceBuddyStore
     @State private var lock = AppLock()
     @State private var tab: Tab = .ask
+    @State private var keyboardVisible = false
     #if canImport(Supabase)
     @State private var auth = SupabaseAuthModel()
     #endif
@@ -90,8 +91,15 @@ struct ContentView: View {
             .scrollPosition(id: pagedTab)
             .scrollIndicators(.hidden)
 
-            CustomTabBar(selection: pagedTab)
+            // The tab bar makes way for the keyboard so the input field
+            // sits directly above it with nothing in between.
+            if !keyboardVisible {
+                CustomTabBar(selection: pagedTab)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: keyboardVisible)
+        .observeKeyboard(isVisible: $keyboardVisible)
     }
 
     /// Bridges the optional scroll position to the concrete tab selection.
@@ -102,7 +110,7 @@ struct ContentView: View {
     @ViewBuilder
     private func pageView(for page: Tab) -> some View {
         switch page {
-        case .ask:     AskView(store: store)
+        case .ask:     AskView(store: store, isActive: tab == .ask)
         case .budget:  BudgetView(store: store)
         case .profile: profileView
         }
@@ -119,6 +127,34 @@ struct ContentView: View {
         }
         #else
         ProfileView(email: nil, onSignOut: nil)
+        #endif
+    }
+}
+
+// MARK: - Keyboard visibility
+
+extension View {
+    /// Tracks the software keyboard's visibility into a binding (iOS only;
+    /// a no-op elsewhere). Uses async notification streams — no Combine.
+    func observeKeyboard(isVisible: Binding<Bool>) -> some View {
+        #if os(iOS)
+        return self
+            .task {
+                for await _ in NotificationCenter.default.notifications(
+                    named: UIResponder.keyboardWillShowNotification
+                ) {
+                    await MainActor.run { isVisible.wrappedValue = true }
+                }
+            }
+            .task {
+                for await _ in NotificationCenter.default.notifications(
+                    named: UIResponder.keyboardWillHideNotification
+                ) {
+                    await MainActor.run { isVisible.wrappedValue = false }
+                }
+            }
+        #else
+        return self
         #endif
     }
 }
@@ -160,9 +196,9 @@ struct CustomTabBar: View {
                         Image(systemName: tab.icon)
                             .font(.system(size: 21, weight: .semibold))
                             .foregroundStyle(selection == tab ? Color.fbPositive : Color.fbSoftText)
-                        Circle()
+                        Rectangle()
                             .fill(selection == tab ? Color.fbPositive : .clear)
-                            .frame(width: 4, height: 4)
+                            .frame(width: 40, height: 4)
                     }
                     .frame(width: 44, height: 40)
                 }

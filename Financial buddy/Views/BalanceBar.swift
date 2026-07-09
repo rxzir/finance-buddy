@@ -33,6 +33,10 @@ struct BalanceBar: View {
         return Color.fbCommitment.opacity(1.0 - t * 0.45)
     }
 
+    /// Set false to render just the bar (e.g. when an itemized list lives
+    /// elsewhere on the same screen and the legend would duplicate it).
+    var showsLegend: Bool = true
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             GeometryReader { geo in
@@ -54,7 +58,9 @@ struct BalanceBar: View {
             .frame(height: barHeight)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-            legend
+            if showsLegend {
+                legend
+            }
         }
     }
 

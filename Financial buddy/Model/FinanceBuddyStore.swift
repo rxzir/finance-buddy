@@ -40,12 +40,24 @@ final class FinanceBuddyStore {
         finances.recurringCommitments.removeAll { $0.id == c.id }
     }
 
+    func updateCommitment(_ c: RecurringCommitment) {
+        if let index = finances.recurringCommitments.firstIndex(where: { $0.id == c.id }) {
+            finances.recurringCommitments[index] = c
+        }
+    }
+
     func addOneOff(_ o: OneOffCost) {
         finances.oneOffCosts.append(o)
     }
 
     func removeOneOff(_ o: OneOffCost) {
         finances.oneOffCosts.removeAll { $0.id == o.id }
+    }
+
+    func updateOneOff(_ o: OneOffCost) {
+        if let index = finances.oneOffCosts.firstIndex(where: { $0.id == o.id }) {
+            finances.oneOffCosts[index] = o
+        }
     }
 
     // MARK: Loading & saving

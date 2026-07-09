@@ -57,13 +57,16 @@ final class ChatViewModel {
 
 struct AskView: View {
     let store: FinanceBuddyStore
+    /// False when another tab is showing; clears keyboard focus.
+    var isActive: Bool = true
     @State private var model: ChatViewModel
     @State private var draft = ""
     @State private var dictation = DictationController()
-    @State private var showAddOneOff = false
+    @FocusState private var inputFocused: Bool
 
-    init(store: FinanceBuddyStore) {
+    init(store: FinanceBuddyStore, isActive: Bool = true) {
         self.store = store
+        self.isActive = isActive
         _model = State(initialValue: ChatViewModel())
     }
 
@@ -75,21 +78,21 @@ struct AskView: View {
 
     var body: some View {
         ZStack {
-            Color.fbBackground.ignoresSafeArea()
+            // Tapping anywhere outside the field dismisses the keyboard.
+            Color.fbBackground
+                .ignoresSafeArea()
+                .onTapGesture { inputFocused = false }
 
             VStack(spacing: 0) {
                 header
                 transcript
                 inputBar
             }
-
-            // Quick one-off entry without leaving the conversation.
-            if showAddOneOff {
-                AddOneOffOverlay(
-                    onCancel: { showAddOneOff = false },
-                    onSave: { store.addOneOff($0); showAddOneOff = false }
-                )
-            }
+        }
+        // One place handles keyboard dismissal for both swipe and tab-bar
+        // navigation: leaving the tab clears focus.
+        .onChange(of: isActive) {
+            if !isActive { inputFocused = false }
         }
     }
 
@@ -106,33 +109,19 @@ struct AskView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(greeting)
-                        .font(.fbHeader(26))
-                        .tracking(-0.5)
-                        .foregroundStyle(Color.fbInk)
-                    Text(Date().formatted(.dateTime.weekday(.wide).day().month(.wide)))
-                        .font(.fbBody(14))
-                        .foregroundStyle(Color.fbSoftText)
-                }
-                Spacer()
-                // Quick-add a one-off cost from right here.
-                Button {
-                    showAddOneOff = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Color.fbOnAccent)
-                        .frame(width: 34, height: 34)
-                        .background(Circle().fill(Color.fbPositive))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Add a one-off cost")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(greeting)
+                    .font(.fbHeader(26))
+                    .tracking(-0.5)
+                    .foregroundStyle(Color.fbInk)
+                Text(Date().formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                    .font(.fbBody(14))
+                    .foregroundStyle(Color.fbSoftText)
             }
 
             statusChip
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 20)
         .padding(.top, 4)
         .padding(.bottom, 12)
@@ -180,6 +169,9 @@ struct AskView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 8)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture { inputFocused = false } // tap transcript → dismiss keyboard
             }
             .onChange(of: model.messages.count) {
                 withAnimation { proxy.scrollTo(model.messages.last?.id, anchor: .bottom) }
@@ -216,6 +208,7 @@ struct AskView: View {
             HStack(spacing: 10) {
                 TextField("…or type your question", text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
+                    .focused($inputFocused)
                     .font(.fbBody(16))
                     .foregroundStyle(Color.fbInk)
                     .lineLimit(1...4)
@@ -233,7 +226,7 @@ struct AskView: View {
                 Button(action: send) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(Color.fbOnAccent)
+                        .foregroundStyle(Color.fbPositive)
                         .frame(width: 44, height: 44)
                         .background(Circle().fill(canSend ? Color.fbPositive : Color.fbHairline))
                 }

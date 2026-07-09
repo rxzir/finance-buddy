@@ -2,27 +2,28 @@
 //  AddItemOverlays.swift
 //  Finance buddy
 //
-//  Custom modal overlays for adding a recurring commitment or a one-off
-//  cost. Deliberately NOT .sheet() — a dimmed ZStack with a floating card
-//  so iOS's default sheet styling can't override the look.
+//  Shared form building blocks and the modal scaffold used by the Budget
+//  edit overlays. Deliberately NOT .sheet() — a dimmed ZStack with a
+//  floating card so iOS's default sheet styling can't override the look.
 //
 
 import SwiftUI
 
-// MARK: - Scaffold shared by both overlays
+// MARK: - Modal scaffold
 
 /// A dimmed backdrop with a floating card, cancel/save footer, and the
 /// enter/exit transition. Content is the form body.
 struct ModalOverlay<Content: View>: View {
     let title: String
     var canSave: Bool
+    var saveLabel: String = "Add"
     let onCancel: () -> Void
     let onSave: () -> Void
     @ViewBuilder var content: Content
 
     var body: some View {
         ZStack {
-            Color.fbInk.opacity(0.35)
+            Color.black.opacity(0.5)
                 .ignoresSafeArea()
                 .onTapGesture(perform: onCancel)
 
@@ -52,7 +53,7 @@ struct ModalOverlay<Content: View>: View {
                             .buttonStyle(.plain)
 
                             Button(action: onSave) {
-                                Text("Add")
+                                Text(saveLabel)
                                     .font(.fbBody(16, weight: .semibold))
                                     .foregroundStyle(Color.fbOnAccent)
                                     .frame(maxWidth: .infinity)
@@ -72,105 +73,6 @@ struct ModalOverlay<Content: View>: View {
             }
         }
         .transition(.opacity)
-    }
-}
-
-// MARK: - Add recurring commitment
-
-struct AddCommitmentOverlay: View {
-    let onCancel: () -> Void
-    let onSave: (RecurringCommitment) -> Void
-
-    @State private var name = ""
-    @State private var amount: Double?
-    @State private var dueDay = 1
-    @State private var category = "General"
-
-    private let categories = ["General", "Housing", "Utilities", "Subscriptions",
-                              "Health", "Transport", "Insurance", "Debt"]
-
-    private var canSave: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty && (amount ?? 0) > 0
-    }
-
-    var body: some View {
-        ModalOverlay(title: "New commitment",
-                     canSave: canSave,
-                     onCancel: onCancel,
-                     onSave: save) {
-            VStack(alignment: .leading, spacing: 16) {
-                LabeledField(label: "Name") {
-                    PlainTextField(placeholder: "e.g. Rent", text: $name)
-                }
-                LabeledField(label: "Amount") {
-                    CurrencyEntryField(value: $amount)
-                }
-                LabeledField(label: "Due day of month") {
-                    Picker("", selection: $dueDay) {
-                        ForEach(1...31, id: \.self) { Text("Day \($0)").tag($0) }
-                    }
-                    .pickerStyle(.menu)
-                    .tint(Color.fbInk)
-                }
-                LabeledField(label: "Category") {
-                    Picker("", selection: $category) {
-                        ForEach(categories, id: \.self) { Text($0).tag($0) }
-                    }
-                    .pickerStyle(.menu)
-                    .tint(Color.fbInk)
-                }
-            }
-        }
-    }
-
-    private func save() {
-        onSave(RecurringCommitment(name: name.trimmingCharacters(in: .whitespaces),
-                                   amount: amount ?? 0,
-                                   dueDay: dueDay,
-                                   category: category))
-    }
-}
-
-// MARK: - Add one-off cost
-
-struct AddOneOffOverlay: View {
-    let onCancel: () -> Void
-    let onSave: (OneOffCost) -> Void
-
-    @State private var name = ""
-    @State private var amount: Double?
-    @State private var date = Date()
-
-    private var canSave: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty && (amount ?? 0) > 0
-    }
-
-    var body: some View {
-        ModalOverlay(title: "New one-off cost",
-                     canSave: canSave,
-                     onCancel: onCancel,
-                     onSave: save) {
-            VStack(alignment: .leading, spacing: 16) {
-                LabeledField(label: "Name") {
-                    PlainTextField(placeholder: "e.g. Flights", text: $name)
-                }
-                LabeledField(label: "Amount") {
-                    CurrencyEntryField(value: $amount)
-                }
-                LabeledField(label: "Date") {
-                    DatePicker("", selection: $date, displayedComponents: .date)
-                        .labelsHidden()
-                        .datePickerStyle(.compact)
-                        .tint(Color.fbPositive)
-                }
-            }
-        }
-    }
-
-    private func save() {
-        onSave(OneOffCost(name: name.trimmingCharacters(in: .whitespaces),
-                          amount: amount ?? 0,
-                          date: date))
     }
 }
 
@@ -210,6 +112,34 @@ struct PlainTextField: View {
     }
 }
 
+/// A numeric field showing the currency symbol, for a non-optional value.
+struct CurrencyField: View {
+    @Binding var value: Double
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(Money.currencySymbol)
+                .font(.fbNumber(22, weight: .semibold))
+                .foregroundStyle(Color.fbSoftText)
+            TextField("0", value: $value, format: .number.precision(.fractionLength(0...2)))
+                .textFieldStyle(.plain)
+                .font(.fbNumber(22, weight: .semibold))
+                .foregroundStyle(Color.fbInk)
+                .decimalKeyboard()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.fbBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.fbHairline, lineWidth: 1)
+        )
+    }
+}
+
 /// Like CurrencyField but for an optional value (empty until typed).
 struct CurrencyEntryField: View {
     @Binding var value: Double?
@@ -237,9 +167,11 @@ struct CurrencyEntryField: View {
     }
 }
 
-#Preview("Add commitment") {
-    ZStack {
-        Color.fbBackground.ignoresSafeArea()
-        AddCommitmentOverlay(onCancel: {}, onSave: { _ in })
+extension Money {
+    static var currencySymbol: String {
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.currencyCode = currencyCode
+        return f.currencySymbol ?? "£"
     }
 }
