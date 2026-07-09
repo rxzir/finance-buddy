@@ -15,5 +15,5 @@ DerivedData/
 .build/
 
 # Secrets — copy SupabaseSecrets.swift.example to SupabaseSecrets.swift
-Financial buddy/SupabaseSecrets.swift
+# (unanchored: ignored wherever it lives)
 SupabaseSecrets.swift

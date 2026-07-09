@@ -60,6 +60,7 @@ struct AskView: View {
     @State private var model: ChatViewModel
     @State private var draft = ""
     @State private var dictation = DictationController()
+    @State private var showAddOneOff = false
 
     init(store: FinanceBuddyStore) {
         self.store = store
@@ -81,20 +82,87 @@ struct AskView: View {
                 transcript
                 inputBar
             }
+
+            // Quick one-off entry without leaving the conversation.
+            if showAddOneOff {
+                AddOneOffOverlay(
+                    onCancel: { showAddOneOff = false },
+                    onSave: { store.addOneOff($0); showAddOneOff = false }
+                )
+            }
+        }
+    }
+
+    // MARK: Header — greeting + the numbers you're wondering about
+
+    private var greeting: String {
+        switch Calendar.current.component(.hour, from: Date()) {
+        case 5..<12:  return "Good morning"
+        case 12..<17: return "Good afternoon"
+        case 17..<22: return "Good evening"
+        default:      return "Up late?"
         }
     }
 
     private var header: some View {
-        HStack {
-            Text("Ask")
-                .font(.fbHeader(28))
-                .tracking(-0.5)
-                .foregroundStyle(Color.fbInk)
-            Spacer()
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(greeting)
+                        .font(.fbHeader(26))
+                        .tracking(-0.5)
+                        .foregroundStyle(Color.fbInk)
+                    Text(Date().formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                        .font(.fbBody(14))
+                        .foregroundStyle(Color.fbSoftText)
+                }
+                Spacer()
+                // Quick-add a one-off cost from right here.
+                Button {
+                    showAddOneOff = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Color.fbOnAccent)
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(Color.fbPositive))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add a one-off cost")
+            }
+
+            statusChip
         }
         .padding(.horizontal, 20)
         .padding(.top, 4)
         .padding(.bottom, 12)
+    }
+
+    /// The at-a-glance answer to "how am I doing?": what's safe to spend
+    /// and how long it has to last.
+    private var statusChip: some View {
+        let safe = store.finances.safeToSpendToday()
+        let days = store.finances.daysUntilPayday()
+        return HStack(spacing: 8) {
+            Circle()
+                .fill(safe < 0 ? Color.fbWarning : Color.fbPositive)
+                .frame(width: 8, height: 8)
+            Text(Money.string(safe))
+                .font(.fbNumber(15, weight: .semibold))
+                .foregroundStyle(safe < 0 ? Color.fbWarning : Color.fbInk)
+            Text(safe < 0 ? "overspent" : "left to spend")
+                .font(.fbBody(14))
+                .foregroundStyle(Color.fbSoftText)
+            Text("·")
+                .foregroundStyle(Color.fbSoftText)
+            Text(days == 0 ? "payday today" : "payday in \(days) day\(days == 1 ? "" : "s")")
+                .font(.fbBody(14))
+                .foregroundStyle(Color.fbSoftText)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(Capsule().fill(Color.fbCard))
+        .overlay(Capsule().strokeBorder(Color.fbHairline, lineWidth: 1))
     }
 
     private var transcript: some View {

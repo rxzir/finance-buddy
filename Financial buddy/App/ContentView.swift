@@ -75,17 +75,36 @@ struct ContentView: View {
 
     private var mainInterface: some View {
         VStack(spacing: 0) {
-            Group {
-                switch tab {
-                case .ask:     AskView(store: store)
-                case .home:    HomeView(finances: store.finances)
-                case .manage:  ManageView(store: store)
-                case .profile: profileView
+            // Horizontally paged screens — swipe between tabs. A non-lazy
+            // HStack keeps every page (and its state, like the chat) alive.
+            ScrollView(.horizontal) {
+                HStack(spacing: 0) {
+                    ForEach(Tab.allCases, id: \.self) { page in
+                        pageView(for: page)
+                            .containerRelativeFrame(.horizontal)
+                    }
                 }
+                .scrollTargetLayout()
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: pagedTab)
+            .scrollIndicators(.hidden)
 
-            CustomTabBar(selection: $tab)
+            CustomTabBar(selection: pagedTab)
+        }
+    }
+
+    /// Bridges the optional scroll position to the concrete tab selection.
+    private var pagedTab: Binding<Tab?> {
+        Binding(get: { tab }, set: { tab = $0 ?? tab })
+    }
+
+    @ViewBuilder
+    private func pageView(for page: Tab) -> some View {
+        switch page {
+        case .ask:     AskView(store: store)
+        case .budget:  BudgetView(store: store)
+        case .profile: profileView
         }
     }
 
@@ -107,13 +126,12 @@ struct ContentView: View {
 // MARK: - Tabs
 
 enum Tab: CaseIterable {
-    case ask, home, manage, profile
+    case ask, budget, profile
 
     var title: String {
         switch self {
         case .ask:     return "Ask"
-        case .home:    return "Home"
-        case .manage:  return "Manage"
+        case .budget:  return "Budget"
         case .profile: return "Profile"
         }
     }
@@ -121,51 +139,40 @@ enum Tab: CaseIterable {
     var icon: String {
         switch self {
         case .ask:     return "bubble.left.and.bubble.right.fill"
-        case .home:    return "chart.bar.fill"
-        case .manage:  return "slider.horizontal.3"
+        case .budget:  return "chart.pie.fill"
         case .profile: return "person.crop.circle"
         }
     }
 }
 
-/// Plain HStack of buttons — not a TabView.
+/// Minimal pager bar: three icons and an active dot. Swiping the pages
+/// moves the selection; tapping an icon jumps to the page. Not a TabView.
 struct CustomTabBar: View {
-    @Binding var selection: Tab
+    @Binding var selection: Tab?
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 36) {
             ForEach(Tab.allCases, id: \.self) { tab in
                 Button {
-                    selection = tab
+                    withAnimation(.easeInOut(duration: 0.25)) { selection = tab }
                 } label: {
-                    VStack(spacing: 4) {
+                    VStack(spacing: 5) {
                         Image(systemName: tab.icon)
-                            .font(.system(size: 20, weight: .semibold))
-                        Text(tab.title)
-                            .font(.fbBody(11, weight: .semibold))
+                            .font(.system(size: 21, weight: .semibold))
+                            .foregroundStyle(selection == tab ? Color.fbPositive : Color.fbSoftText)
+                        Circle()
+                            .fill(selection == tab ? Color.fbPositive : .clear)
+                            .frame(width: 4, height: 4)
                     }
-                    .foregroundStyle(selection == tab ? Color.fbPositive : Color.fbSoftText)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(selection == tab ? Color.fbPositive.opacity(0.12) : .clear)
-                    )
+                    .frame(width: 44, height: 40)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(tab.title)
             }
         }
-        .padding(6)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.fbCard)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .strokeBorder(Color.fbHairline, lineWidth: 1)
-        )
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
+        .background(Color.fbBackground)
     }
 }
 
@@ -177,19 +184,29 @@ struct CustomTabBar: View {
     // Shows the main interface (bypassing the lock) so the custom tab bar
     // is visible composed with a screen.
     struct ShellPreview: View {
-        @State private var tab: Tab = .ask
+        @State private var tab: Tab? = .ask
         let store = FinanceBuddyStore(finances: .sample)
         var body: some View {
             VStack(spacing: 0) {
-                Group {
-                    switch tab {
-                    case .ask:     AskView(store: store)
-                    case .home:    HomeView(finances: store.finances)
-                    case .manage:  ManageView(store: store)
-                    case .profile: ProfileView(email: "preview@example.com", onSignOut: {})
+                ScrollView(.horizontal) {
+                    HStack(spacing: 0) {
+                        ForEach(Tab.allCases, id: \.self) { page in
+                            Group {
+                                switch page {
+                                case .ask:     AskView(store: store)
+                                case .budget:  BudgetView(store: store)
+                                case .profile: ProfileView(email: "preview@example.com", onSignOut: {})
+                                }
+                            }
+                            .containerRelativeFrame(.horizontal)
+                        }
                     }
+                    .scrollTargetLayout()
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .scrollTargetBehavior(.paging)
+                .scrollPosition(id: $tab)
+                .scrollIndicators(.hidden)
+
                 CustomTabBar(selection: $tab)
             }
             .background(Color.fbBackground)

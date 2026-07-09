@@ -26,7 +26,6 @@ struct ManageView: View {
 
             ScrollView {
                 VStack(spacing: 16) {
-                    header
                     balanceCard
                     incomeCard
                     commitmentsCard
@@ -42,19 +41,6 @@ struct ManageView: View {
                 overlay(for: editor)
             }
         }
-    }
-
-    // MARK: Header
-
-    private var header: some View {
-        HStack {
-            Text("Manage")
-                .font(.fbHeader(28))
-                .tracking(-0.5)
-                .foregroundStyle(Color.fbInk)
-            Spacer()
-        }
-        .padding(.top, 4)
     }
 
     // MARK: Balance
