@@ -59,12 +59,23 @@ final class SupabaseAuthModel {
         }
     }
 
+    /// Set when sign-up succeeded but the account still needs email
+    /// confirmation before it can sign in.
+    var infoMessage: String?
+
     func signUp(email: String, password: String) async {
         await run {
             let response = try await self.client.auth.signUp(email: email, password: password)
-            // If email confirmation is off, we get a session immediately.
-            self.userId = response.session?.user.id ?? response.user.id
-            self.email = response.user.email
+            if let session = response.session {
+                // Email confirmation is off — signed in immediately.
+                self.userId = session.user.id
+                self.email = session.user.email
+            } else {
+                // Confirmation required: NOT signed in yet. Treating the
+                // user as signed in here would leave every RLS write
+                // failing with an invalid session.
+                self.infoMessage = "Almost there — confirm the link we sent to \(email), then sign in."
+            }
         }
     }
 
@@ -77,6 +88,7 @@ final class SupabaseAuthModel {
     private func run(_ work: @escaping () async throws -> Void) async {
         isWorking = true
         errorMessage = nil
+        infoMessage = nil
         defer { isWorking = false }
         do { try await work() }
         catch { errorMessage = error.localizedDescription }

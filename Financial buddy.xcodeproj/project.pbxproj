@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		718C855B2FFF1A1A00B000AA /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 718C855A2FFF1A1A00B000AA /* Supabase */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		718C851E2FFEAE9300B000AA /* Financial buddy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Financial buddy.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				718C855B2FFF1A1A00B000AA /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -33,6 +38,7 @@
 			isa = PBXGroup;
 			children = (
 				718C85202FFEAE9300B000AA /* Financial buddy */,
+				718C85592FFF1A1A00B000AA /* Frameworks */,
 				718C851F2FFEAE9300B000AA /* Products */,
 			);
 			sourceTree = "<group>";
@@ -43,6 +49,13 @@
 				718C851E2FFEAE9300B000AA /* Financial buddy.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		718C85592FFF1A1A00B000AA /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -65,6 +78,7 @@
 			);
 			name = "Financial buddy";
 			packageProductDependencies = (
+				718C855A2FFF1A1A00B000AA /* Supabase */,
 			);
 			productName = "Financial buddy";
 			productReference = 718C851E2FFEAE9300B000AA /* Financial buddy.app */;
@@ -257,6 +271,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Financial buddy/Info.plist";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -301,6 +316,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Financial buddy/Info.plist";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -365,6 +381,14 @@
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		718C855A2FFF1A1A00B000AA /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 718C85482FFEC2E700B000AA /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 718C85162FFEAE9300B000AA /* Project object */;
 }

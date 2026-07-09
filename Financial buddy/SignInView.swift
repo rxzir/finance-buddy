@@ -57,6 +57,12 @@ struct SignInView: View {
                                 .foregroundStyle(Color.fbWarning)
                         }
 
+                        if let info = auth.infoMessage {
+                            Text(info)
+                                .font(.fbBody(13))
+                                .foregroundStyle(Color.fbPositive)
+                        }
+
                         Button(action: submit) {
                             HStack {
                                 if auth.isWorking { ProgressView().tint(.fbOnAccent) }
@@ -78,7 +84,7 @@ struct SignInView: View {
                 .padding(.horizontal, 20)
 
                 Button {
-                    withAnimation { isSignUp.toggle(); auth.errorMessage = nil }
+                    withAnimation { isSignUp.toggle(); auth.errorMessage = nil; auth.infoMessage = nil }
                 } label: {
                     Text(isSignUp ? "Have an account? Sign in"
                                   : "New here? Create an account")
@@ -96,6 +102,11 @@ struct SignInView: View {
         Task {
             if isSignUp {
                 await auth.signUp(email: email, password: password)
+                // Confirmation-required flow: drop back to sign-in so the
+                // user can log in right after tapping the email link.
+                if auth.infoMessage != nil {
+                    withAnimation { isSignUp = false }
+                }
             } else {
                 await auth.signIn(email: email, password: password)
             }
