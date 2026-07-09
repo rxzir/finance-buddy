@@ -23,7 +23,42 @@ enum SupabaseConfig {
     static let url = SupabaseSecrets.projectURL
     static let anonKey = SupabaseSecrets.anonKey
 
-    static let client = SupabaseClient(supabaseURL: url, supabaseKey: anonKey)
+    static let client = SupabaseClient(
+        supabaseURL: url,
+        supabaseKey: anonKey,
+        options: SupabaseClientOptions(
+            db: .init(encoder: postgrestEncoder, decoder: postgrestDecoder)
+        )
+    )
+
+    /// Postgres `timestamptz` comes back as ISO 8601 with or without
+    /// fractional seconds (e.g. "2026-07-27T00:00:00+00:00"). Pin both
+    /// directions explicitly so decoding never depends on SDK defaults.
+    static let postgrestDecoder: JSONDecoder = {
+        let withFractional = ISO8601DateFormatter()
+        withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let string = try decoder.singleValueContainer().decode(String.self)
+            if let date = withFractional.date(from: string) ?? plain.date(from: string) {
+                return date
+            }
+            throw DecodingError.dataCorrupted(.init(
+                codingPath: decoder.codingPath,
+                debugDescription: "Unrecognised timestamp: \(string)"
+            ))
+        }
+        return decoder
+    }()
+
+    static let postgrestEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
 }
 
 // MARK: - Auth
