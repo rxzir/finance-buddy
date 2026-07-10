@@ -51,7 +51,7 @@ struct LockView: View {
                             .fill(Color.fbPositive)
                     )
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
             .disabled(lock.isAuthenticating)
             .padding(.horizontal, 24)
             .padding(.bottom, 32)

@@ -23,8 +23,11 @@ struct ModalOverlay<Content: View>: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.5)
+            // Progressive glass dim: blur what's behind, then darken.
+            Rectangle()
+                .fill(.ultraThinMaterial)
                 .ignoresSafeArea()
+                .overlay(Color.black.opacity(0.35).ignoresSafeArea())
                 .onTapGesture(perform: onCancel)
 
             VStack(spacing: 0) {
@@ -50,7 +53,7 @@ struct ModalOverlay<Content: View>: View {
                                             .fill(Color.fbBackground)
                                     )
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.pressable)
 
                             Button(action: onSave) {
                                 Text(saveLabel)
@@ -63,7 +66,7 @@ struct ModalOverlay<Content: View>: View {
                                             .fill(canSave ? Color.fbPositive : Color.fbHairline)
                                     )
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.pressable)
                             .disabled(!canSave)
                         }
                     }

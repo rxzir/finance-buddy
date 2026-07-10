@@ -91,8 +91,11 @@ struct ManageCommitmentsOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.5)
+            // Progressive glass dim: blur what's behind, then darken.
+            Rectangle()
+                .fill(.ultraThinMaterial)
                 .ignoresSafeArea()
+                .overlay(Color.black.opacity(0.35).ignoresSafeArea())
                 .onTapGesture { if draft == nil { onClose() } }
 
             VStack(spacing: 0) {
@@ -104,7 +107,8 @@ struct ManageCommitmentsOverlay: View {
                         if draft == nil {
                             segmentToggle
                             itemList
-                            addButton // same position & style for both segments
+                            addButton  // same position & style for both segments
+                            doneButton // below Add
                         } else {
                             form
                         }
@@ -120,22 +124,11 @@ struct ManageCommitmentsOverlay: View {
     // MARK: Pieces
 
     private var header: some View {
-        HStack {
-            Text(draft == nil ? "Edit commitments"
-                              : (draft?.id == nil ? "New item" : "Edit item"))
-                .font(.fbHeader(20))
-                .tracking(-0.3)
-                .foregroundStyle(Color.fbInk)
-            Spacer()
-            if draft == nil {
-                Button(action: onClose) {
-                    Text("Done")
-                        .font(.fbBody(15, weight: .semibold))
-                        .foregroundStyle(Color.fbPositive)
-                }
-                .buttonStyle(.plain)
-            }
-        }
+        Text(draft == nil ? "Upcoming payments"
+                          : (draft?.id == nil ? "New payment" : "Edit payment"))
+            .font(.fbHeader(20))
+            .tracking(-0.3)
+            .foregroundStyle(Color.fbInk)
     }
 
     private var segmentToggle: some View {
@@ -154,7 +147,7 @@ struct ManageCommitmentsOverlay: View {
                                 .fill(segment == s ? Color.fbBackground : .clear)
                         )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
             }
         }
         .padding(4)
@@ -236,14 +229,14 @@ struct ManageCommitmentsOverlay: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
 
             Button(action: onDelete) {
                 Image(systemName: "minus.circle.fill")
                     .font(.system(size: 20))
                     .foregroundStyle(Color.fbWarning.opacity(0.85))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.pressable)
         }
         .padding(.vertical, 7)
     }
@@ -257,7 +250,7 @@ struct ManageCommitmentsOverlay: View {
             HStack(spacing: 8) {
                 Image(systemName: "plus")
                     .font(.system(size: 14, weight: .bold))
-                Text(segment == .recurring ? "Add recurring commitment" : "Add one-off cost")
+                Text("Add")
                     .font(.fbBody(15, weight: .semibold))
             }
             .foregroundStyle(Color.fbOnAccent)
@@ -268,7 +261,23 @@ struct ManageCommitmentsOverlay: View {
                     .fill(Color.fbPositive)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
+    }
+
+    /// Sits below Add: quiet, borderless, closes the overlay.
+    private var doneButton: some View {
+        Button(action: onClose) {
+            Text("Done")
+                .font(.fbBody(15, weight: .semibold))
+                .foregroundStyle(Color.fbSoftText)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.white.opacity(0.05))
+                )
+        }
+        .buttonStyle(.pressable)
     }
 
     // MARK: Add / edit form
@@ -329,7 +338,7 @@ struct ManageCommitmentsOverlay: View {
                                     .fill(Color.fbBackground)
                             )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
 
                     Button(action: saveDraft) {
                         Text("Save")
@@ -342,7 +351,7 @@ struct ManageCommitmentsOverlay: View {
                                     .fill(canSaveDraft ? Color.fbPositive : Color.fbHairline)
                             )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                     .disabled(!canSaveDraft)
                 }
             }
@@ -372,7 +381,7 @@ struct ManageCommitmentsOverlay: View {
 
 #Preview("Manage commitments") {
     ZStack {
-        Color.fbBackground.ignoresSafeArea()
+        FBBackground()
         ManageCommitmentsOverlay(store: FinanceBuddyStore(finances: .sample), onClose: {})
     }
     .preferredColorScheme(.dark)

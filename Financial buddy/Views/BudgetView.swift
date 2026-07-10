@@ -22,11 +22,23 @@ struct BudgetView: View {
     }
     @State private var overlay: ActiveOverlay?
 
+    /// How the Today card visualises the balance being spent.
+    enum ChartStyle: String, CaseIterable {
+        case bar, sankey
+        var icon: String {
+            switch self {
+            case .bar:    return "chart.bar.xaxis"
+            case .sankey: return "arrow.triangle.branch"
+            }
+        }
+    }
+    @State private var chartStyle: ChartStyle = .bar
+
     private var finances: Finances { store.finances }
 
     var body: some View {
         ZStack {
-            Color.fbBackground.ignoresSafeArea()
+            FBBackground()
 
             ScrollView {
                 VStack(spacing: 16) {
@@ -71,8 +83,8 @@ struct BudgetView: View {
 
         return Card {
             VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    cardTitle("Today")
+                HStack(alignment: .top) {
+                    chartToggle
                     Spacer()
                     pencilButton { overlay = .editToday }
                 }
@@ -88,14 +100,16 @@ struct BudgetView: View {
                         .foregroundStyle(isOverspent ? Color.fbWarning : Color.fbInk)
                         .minimumScaleFactor(0.5)
                         .lineLimit(1)
+                        .contentTransition(.numericText(value: safe))
+                        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: safe)
                     Text(days == 0 ? "Payday is today" : "\(days) day\(days == 1 ? "" : "s") until payday")
                         .font(.fbBody(14, weight: .medium))
                         .foregroundStyle(Color.fbSoftText)
                 }
                 .frame(maxWidth: .infinity)
 
-                // Balance context + the bar (no legend — the itemized list
-                // is the Commitments card below).
+                // Balance context + one of two visuals (no legend — the
+                // itemized list is the Upcoming payments card below).
                 HStack {
                     Text("Balance")
                         .font(.fbBody(14))
@@ -104,14 +118,59 @@ struct BudgetView: View {
                     Text(Money.string(finances.balance))
                         .font(.fbNumber(15, weight: .semibold))
                         .foregroundStyle(Color.fbInk)
+                        .contentTransition(.numericText(value: finances.balance))
+                        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: finances.balance)
                 }
 
-                BalanceBar(balance: finances.balance,
-                           obligations: finances.upcomingObligations(),
-                           safeToSpend: safe,
-                           showsLegend: false)
+                switch chartStyle {
+                case .bar:
+                    BalanceBar(balance: finances.balance,
+                               obligations: finances.upcomingObligations(),
+                               safeToSpend: safe,
+                               showsLegend: false)
+                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                case .sankey:
+                    SankeyView(balance: finances.balance,
+                               obligations: finances.upcomingObligations(),
+                               safeToSpend: safe)
+                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                }
             }
         }
+    }
+
+    /// Two tiny icons flipping the Today visual between the eaten bar and
+    /// the flow (sankey) view.
+    private var chartToggle: some View {
+        HStack(spacing: 2) {
+            ForEach(ChartStyle.allCases, id: \.self) { style in
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        chartStyle = style
+                    }
+                } label: {
+                    Image(systemName: style.icon)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(chartStyle == style ? Color.fbInk : Color.fbSoftText)
+                        .frame(width: 30, height: 26)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(chartStyle == style ? Color.white.opacity(0.10) : .clear)
+                        )
+                }
+                .buttonStyle(.pressable)
+                .accessibilityLabel(style == .bar ? "Bar view" : "Flow view")
+            }
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.fbHairline, lineWidth: 1)
+        )
     }
 
     // MARK: 2. Commitments (merged list, split at payday)
@@ -125,13 +184,13 @@ struct BudgetView: View {
         return Card {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    cardTitle("Commitments")
+                    cardTitle("Upcoming payments")
                     Spacer()
                     pencilButton { overlay = .manageCommitments }
                 }
 
                 if schedule.isEmpty {
-                    Text("Nothing coming up. Add commitments with the pencil.")
+                    Text("Nothing coming up. Add payments with the pencil.")
                         .font(.fbBody(14))
                         .foregroundStyle(Color.fbSoftText)
                 } else {
@@ -251,10 +310,10 @@ struct BudgetView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color.fbSoftText)
                 .frame(width: 30, height: 30)
-                .background(Circle().fill(Color.fbBackground))
+                .background(Circle().fill(Color.white.opacity(0.05)))
                 .overlay(Circle().strokeBorder(Color.fbHairline, lineWidth: 1))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
         .accessibilityLabel("Edit")
     }
 }

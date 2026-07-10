@@ -19,7 +19,7 @@ struct ProfileView: View {
 
     var body: some View {
         ZStack {
-            Color.fbBackground.ignoresSafeArea()
+            FBBackground()
 
             ScrollView {
                 VStack(spacing: 16) {
@@ -81,7 +81,7 @@ struct ProfileView: View {
                                     .strokeBorder(Color.fbWarning.opacity(0.5), lineWidth: 1)
                             )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.pressable)
                 }
             }
         }
@@ -149,7 +149,7 @@ struct ProfileView: View {
                                         .fill(Color.fbBackground)
                                 )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressable)
 
                         Button {
                             Task {
@@ -172,7 +172,7 @@ struct ProfileView: View {
                                     .fill(Color.fbWarning)
                             )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressable)
                         .disabled(isSigningOut)
                     }
                 }

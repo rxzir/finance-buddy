@@ -49,8 +49,11 @@ struct BalanceBar: View {
                     }
 
                     if !isOverspent {
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(Color.fbPositive)
+                        // Safe-to-spend reads as "open space": diagonal
+                        // hatching instead of a solid block.
+                        StripedFill(color: Color.fbPositive)
+                            .background(Color.fbPositive.opacity(0.10))
+                            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                             .frame(width: max(2, segmentWidth(safeToSpend, in: width)))
                     }
                 }
@@ -98,6 +101,31 @@ struct BalanceBar: View {
     }
 }
 
+// MARK: - Striped fill
+
+/// Diagonal 45° hatching — used for the safe-to-spend segment so "money
+/// that's yours" reads differently from the solid committed blocks.
+struct StripedFill: View {
+    var color: Color
+    var lineWidth: CGFloat = 2.5
+    var spacing: CGFloat = 6
+
+    var body: some View {
+        Canvas { context, size in
+            var path = Path()
+            // Cover the whole rect with 45° lines, starting off-canvas so
+            // the corner is striped too.
+            var x = -size.height
+            while x < size.width {
+                path.move(to: CGPoint(x: x, y: size.height))
+                path.addLine(to: CGPoint(x: x + size.height, y: 0))
+                x += spacing
+            }
+            context.stroke(path, with: .color(color), lineWidth: lineWidth)
+        }
+    }
+}
+
 #Preview {
     let f = Finances.sample
     return VStack {
@@ -110,4 +138,5 @@ struct BalanceBar: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Color.fbBackground)
+    .preferredColorScheme(.dark)
 }

@@ -22,7 +22,7 @@ struct SignInView: View {
 
     var body: some View {
         ZStack {
-            Color.fbBackground.ignoresSafeArea()
+            FBBackground()
 
             VStack(spacing: 20) {
                 Spacer()
@@ -77,7 +77,7 @@ struct SignInView: View {
                                     .fill(canSubmit ? Color.fbPositive : Color.fbHairline)
                             )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.pressable)
                         .disabled(!canSubmit)
                     }
                 }
@@ -91,7 +91,7 @@ struct SignInView: View {
                         .font(.fbBody(14, weight: .medium))
                         .foregroundStyle(Color.fbPositive)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
 
                 Spacer()
             }

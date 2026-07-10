@@ -32,7 +32,7 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            Color.fbBackground.ignoresSafeArea()
+            FBBackground()
 
             if lock.isUnlocked {
                 postUnlock
@@ -181,34 +181,61 @@ enum Tab: CaseIterable {
     }
 }
 
-/// Minimal pager bar: three icons and an active dot. Swiping the pages
-/// moves the selection; tapping an icon jumps to the page. Not a TabView.
+/// Minimal pager bar: a floating glass capsule with three icons and a
+/// pill that glides between them. Swiping the pages moves the selection;
+/// tapping an icon jumps to the page. Not a TabView.
 struct CustomTabBar: View {
     @Binding var selection: Tab?
+    @Namespace private var pill
 
     var body: some View {
-        HStack(spacing: 36) {
+        HStack(spacing: 6) {
             ForEach(Tab.allCases, id: \.self) { tab in
                 Button {
-                    withAnimation(.easeInOut(duration: 0.25)) { selection = tab }
-                } label: {
-                    VStack(spacing: 5) {
-                        Image(systemName: tab.icon)
-                            .font(.system(size: 21, weight: .semibold))
-                            .foregroundStyle(selection == tab ? Color.fbPositive : Color.fbSoftText)
-                        Rectangle()
-                            .fill(selection == tab ? Color.fbPositive : .clear)
-                            .frame(width: 40, height: 4)
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        selection = tab
                     }
-                    .frame(width: 44, height: 40)
+                } label: {
+                    Image(systemName: tab.icon)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(selection == tab ? Color.fbInk : Color.fbSoftText)
+                        .frame(width: 58, height: 40)
+                        .background {
+                            if selection == tab {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.10))
+                                    .overlay(
+                                        Capsule().strokeBorder(Color.white.opacity(0.10),
+                                                               lineWidth: 1)
+                                    )
+                                    .matchedGeometryEffect(id: "activePill", in: pill)
+                            }
+                        }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
                 .accessibilityLabel(tab.title)
             }
         }
-        .padding(.vertical, 6)
+        .padding(5)
+        .background {
+            Capsule().fill(.ultraThinMaterial)
+            Capsule().fill(
+                LinearGradient(colors: [Color.white.opacity(0.06), .clear],
+                               startPoint: .top, endPoint: .bottom)
+            )
+        }
+        .overlay(
+            Capsule().strokeBorder(
+                LinearGradient(colors: [Color.white.opacity(0.16),
+                                        Color.white.opacity(0.04)],
+                               startPoint: .top, endPoint: .bottom),
+                lineWidth: 1
+            )
+        )
+        .shadow(color: .black.opacity(0.45), radius: 18, y: 6)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
         .frame(maxWidth: .infinity)
-        .background(Color.fbBackground)
     }
 }
 

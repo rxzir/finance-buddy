@@ -230,7 +230,7 @@ struct AskView: View {
                         .frame(width: 44, height: 44)
                         .background(Circle().fill(canSend ? Color.fbPositive : Color.fbHairline))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.pressable)
                 .disabled(!canSend)
             }
         }
@@ -260,7 +260,7 @@ struct AskView: View {
                     .foregroundStyle(Color.fbOnAccent)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.pressable)
         .disabled(model.isThinking)
         .animation(.easeInOut(duration: 0.2), value: dictation.isRecording)
         .accessibilityLabel(dictation.isRecording ? "Stop and send" : "Dictate a question")
