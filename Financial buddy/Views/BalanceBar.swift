@@ -140,7 +140,7 @@ struct BalanceBar: View {
             Text(Money.string(amount))
                 .font(.fbNumber(13, weight: .semibold))
                 .foregroundStyle(Color.fbInk)
-            Text("· \(percent)% of balance")
+            Text("· \(percent)%")
                 .font(.fbBody(13))
                 .foregroundStyle(Color.fbSoftText)
         }

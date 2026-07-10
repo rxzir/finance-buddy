@@ -75,24 +75,27 @@ struct ContentView: View {
     #endif
 
     private var mainInterface: some View {
-        VStack(spacing: 0) {
-            // Horizontally paged screens — swipe between tabs. A non-lazy
-            // HStack keeps every page (and its state, like the chat) alive.
-            ScrollView(.horizontal) {
-                HStack(spacing: 0) {
-                    ForEach(Tab.allCases, id: \.self) { page in
-                        pageView(for: page)
-                            .containerRelativeFrame(.horizontal)
-                    }
+        // Horizontally paged screens — swipe between tabs. A non-lazy
+        // HStack keeps every page (and its state, like the chat) alive.
+        ScrollView(.horizontal) {
+            HStack(spacing: 0) {
+                ForEach(Tab.allCases, id: \.self) { page in
+                    pageView(for: page)
+                        .containerRelativeFrame(.horizontal)
                 }
-                .scrollTargetLayout()
             }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: pagedTab)
-            .scrollIndicators(.hidden)
-
-            // The tab bar makes way for the keyboard so the input field
-            // sits directly above it with nothing in between.
+            .scrollTargetLayout()
+        }
+        .scrollTargetBehavior(.paging)
+        .scrollPosition(id: pagedTab)
+        .scrollIndicators(.hidden)
+        // Soft progressive-blur fade where content meets the top edge and
+        // the tab bar pocket — every vertical scroll in the hierarchy.
+        .scrollEdgeEffectStyle(.soft, for: .vertical)
+        // A real bar (not a VStack sibling): pages scroll under it and the
+        // system fades content into its pocket. It still makes way for the
+        // keyboard so the input sits directly above it.
+        .safeAreaBar(edge: .bottom) {
             if !keyboardVisible {
                 CustomTabBar(selection: pagedTab)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -103,8 +106,16 @@ struct ContentView: View {
     }
 
     /// Bridges the optional scroll position to the concrete tab selection.
+    /// The setter animates so the tab bar pill glides when the change
+    /// comes from a swipe, exactly as it does from a tap.
     private var pagedTab: Binding<Tab?> {
-        Binding(get: { tab }, set: { tab = $0 ?? tab })
+        Binding(get: { tab },
+                set: { newValue in
+                    guard let newValue, newValue != tab else { return }
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        tab = newValue
+                    }
+                })
     }
 
     @ViewBuilder
@@ -250,26 +261,26 @@ struct CustomTabBar: View {
         @State private var tab: Tab? = .ask
         let store = FinanceBuddyStore(finances: .sample)
         var body: some View {
-            VStack(spacing: 0) {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 0) {
-                        ForEach(Tab.allCases, id: \.self) { page in
-                            Group {
-                                switch page {
-                                case .ask:     AskView(store: store)
-                                case .budget:  BudgetView(store: store)
-                                case .profile: ProfileView(email: "preview@example.com", onSignOut: {})
-                                }
+            ScrollView(.horizontal) {
+                HStack(spacing: 0) {
+                    ForEach(Tab.allCases, id: \.self) { page in
+                        Group {
+                            switch page {
+                            case .ask:     AskView(store: store)
+                            case .budget:  BudgetView(store: store)
+                            case .profile: ProfileView(email: "preview@example.com", onSignOut: {})
                             }
-                            .containerRelativeFrame(.horizontal)
                         }
+                        .containerRelativeFrame(.horizontal)
                     }
-                    .scrollTargetLayout()
                 }
-                .scrollTargetBehavior(.paging)
-                .scrollPosition(id: $tab)
-                .scrollIndicators(.hidden)
-
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $tab)
+            .scrollIndicators(.hidden)
+            .scrollEdgeEffectStyle(.soft, for: .vertical)
+            .safeAreaBar(edge: .bottom) {
                 CustomTabBar(selection: $tab)
             }
             .background(Color.fbBackground)
