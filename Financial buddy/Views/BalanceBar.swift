@@ -37,6 +37,13 @@ struct BalanceBar: View {
     /// elsewhere on the same screen and the legend would duplicate it).
     var showsLegend: Bool = true
 
+    /// Tapped segment — shows a name / amount / percentage readout.
+    private enum Selection: Equatable {
+        case obligation(UUID)
+        case safe
+    }
+    @State private var selection: Selection?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             GeometryReader { geo in
@@ -45,7 +52,14 @@ struct BalanceBar: View {
                     ForEach(Array(obligations.enumerated()), id: \.element.id) { index, ob in
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
                             .fill(shade(for: index))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    .strokeBorder(Color.fbInk.opacity(
+                                        selection == .obligation(ob.id) ? 0.9 : 0), lineWidth: 1.5)
+                            )
                             .frame(width: max(2, segmentWidth(ob.amount, in: width)))
+                            .contentShape(Rectangle())
+                            .onTapGesture { toggle(.obligation(ob.id)) }
                     }
 
                     if !isOverspent {
@@ -54,17 +68,86 @@ struct BalanceBar: View {
                         StripedFill(color: Color.fbPositive)
                             .background(Color.fbPositive.opacity(0.10))
                             .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    .strokeBorder(Color.fbInk.opacity(
+                                        selection == .safe ? 0.9 : 0), lineWidth: 1.5)
+                            )
                             .frame(width: max(2, segmentWidth(safeToSpend, in: width)))
+                            .contentShape(Rectangle())
+                            .onTapGesture { toggle(.safe) }
                     }
                 }
             }
             .frame(height: barHeight)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
+            if let selection {
+                detailChip(for: selection)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
             if showsLegend {
                 legend
             }
         }
+    }
+
+    private func toggle(_ new: Selection) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            selection = (selection == new) ? nil : new
+        }
+    }
+
+    // MARK: Tap readout
+
+    /// Name, amount and share of the balance for the tapped segment.
+    private func detailChip(for selection: Selection) -> some View {
+        let name: String
+        let amount: Double
+        let isSafe: Bool
+
+        switch selection {
+        case .safe:
+            name = "Safe to spend"
+            amount = safeToSpend
+            isSafe = true
+        case .obligation(let id):
+            let ob = obligations.first { $0.id == id }
+            name = ob?.name ?? ""
+            amount = ob?.amount ?? 0
+            isSafe = false
+        }
+
+        let percent = denominator > 0 ? Int((amount / denominator * 100).rounded()) : 0
+
+        return HStack(spacing: 8) {
+            Group {
+                if isSafe {
+                    StripedFill(color: Color.fbPositive, lineWidth: 1.5, spacing: 4)
+                        .background(Color.fbPositive.opacity(0.12))
+                } else {
+                    Color.fbCommitment
+                }
+            }
+            .frame(width: 12, height: 12)
+            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+
+            Text(name)
+                .font(.fbBody(13, weight: .semibold))
+                .foregroundStyle(Color.fbInk)
+                .lineLimit(1)
+            Text(Money.string(amount))
+                .font(.fbNumber(13, weight: .semibold))
+                .foregroundStyle(Color.fbInk)
+            Text("· \(percent)% of balance")
+                .font(.fbBody(13))
+                .foregroundStyle(Color.fbSoftText)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Capsule().fill(Color.white.opacity(0.06)))
+        .overlay(Capsule().strokeBorder(Color.fbHairline, lineWidth: 1))
     }
 
     private func segmentWidth(_ amount: Double, in totalWidth: CGFloat) -> CGFloat {

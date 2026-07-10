@@ -130,9 +130,14 @@ struct BudgetView: View {
                                showsLegend: false)
                         .transition(.opacity.combined(with: .scale(scale: 0.97)))
                 case .sankey:
-                    SankeyView(balance: finances.balance,
-                               obligations: finances.upcomingObligations(),
-                               safeToSpend: safe)
+                    // Income split into the three groups (recurring /
+                    // one-time / what's left) — a monthly view, unlike
+                    // the balance-based bar.
+                    SankeyView(income: finances.income.amount,
+                               recurringTotal: finances.recurringCommitments.reduce(0) { $0 + $1.amount },
+                               oneOffTotal: finances.upcomingSchedule()
+                                   .filter { if case .oneOff = $0.kind { return true }; return false }
+                                   .reduce(0) { $0 + $1.amount })
                         .transition(.opacity.combined(with: .scale(scale: 0.97)))
                 }
             }
