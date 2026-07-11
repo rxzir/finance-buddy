@@ -2,42 +2,54 @@
 //  SankeyView.swift
 //  Finance buddy
 //
-//  A minimal Sankey diagram: monthly income enters on the left and splits
-//  into three flows — recurring payments, one-time payments, and the
-//  hatched safe-to-spend remainder. Drawn entirely with Canvas —
-//  monochrome bands, subtle gradients, no chart library.
+//  A two-stage Sankey: every income stream flows into the balance pool in
+//  the middle (labelled with the accumulated total), which fans out into
+//  recurring payments, one-time payments and the hatched safe-to-spend
+//  remainder. Drawn entirely with Canvas — monochrome bands, subtle
+//  gradients, no chart library. Labels sit inside the diagram: income
+//  labels to the right of their node, expense labels to the left of theirs.
 //
 
 import SwiftUI
 
 struct SankeyView: View {
-    let income: Double
+    let sources: [IncomeSource]
     let recurringTotal: Double
     let oneOffTotal: Double
 
     private let nodeWidth: CGFloat = 5
     private let rowGap: CGFloat = 10
-    private let labelWidth: CGFloat = 118
-    /// Rows never get thinner than this so labels stay legible; the
-    /// difference is reclaimed from the larger rows.
-    private let minRowHeight: CGFloat = 30
+    private let labelInset: CGFloat = 10
+    /// Headroom above the diagram for the pool's total-income label.
+    private let topInset: CGFloat = 18
+    /// Rows never get thinner than this so the two-line labels stay
+    /// legible; the difference is reclaimed from the larger rows.
+    private let minRowHeight: CGFloat = 32
 
     private struct Flow: Identifiable {
         let id: String
         let name: String
         let amount: Double
-        let isSafe: Bool
+        var isSafe = false
     }
 
-    /// The three groups. Safe-to-spend is what's left of income once both
-    /// payment groups are covered (omitted when nothing is left).
-    private var flows: [Flow] {
+    private var income: Double { sources.reduce(0) { $0 + $1.amount } }
+
+    /// Every income stream keeps its own band and label.
+    private var inflows: [Flow] {
+        sources.filter { $0.amount > 0 }
+            .map { Flow(id: $0.id.uuidString, name: $0.name, amount: $0.amount) }
+    }
+
+    /// The three outgoing groups. Safe-to-spend is what's left of income
+    /// once both payment groups are covered (omitted when nothing is left).
+    private var outflows: [Flow] {
         var rows: [Flow] = []
         if recurringTotal > 0 {
-            rows.append(Flow(id: "recurring", name: "Recurring", amount: recurringTotal, isSafe: false))
+            rows.append(Flow(id: "recurring", name: "Recurring", amount: recurringTotal))
         }
         if oneOffTotal > 0 {
-            rows.append(Flow(id: "oneOff", name: "One-time", amount: oneOffTotal, isSafe: false))
+            rows.append(Flow(id: "oneOff", name: "One-time", amount: oneOffTotal))
         }
         let safe = income - recurringTotal - oneOffTotal
         if safe > 0 {
@@ -67,123 +79,164 @@ struct SankeyView: View {
     }
 
     var body: some View {
-        let rows = flows
+        let left = inflows
+        let right = outflows
 
-        VStack(alignment: .leading, spacing: 10) {
-            // Source label: this diagram starts from income, not balance.
-            HStack {
-                Text("Income")
-                    .font(.fbBody(12, weight: .semibold))
-                    .foregroundStyle(Color.fbSoftText)
-                Text(Money.string(income))
-                    .font(.fbNumber(12, weight: .semibold))
-                    .foregroundStyle(Color.fbInk)
-                Spacer()
+        if left.isEmpty || right.isEmpty {
+            Text("Add income and payments to see the flow.")
+                .font(.fbBody(13))
+                .foregroundStyle(Color.fbSoftText)
+        } else {
+            Canvas { context, size in
+                draw(left: left, right: right, in: &context, size: size)
             }
-
-            if rows.isEmpty {
-                Text("Add income and payments to see the flow.")
-                    .font(.fbBody(13))
-                    .foregroundStyle(Color.fbSoftText)
-            } else {
-                diagram(rows: rows)
-            }
+            .frame(height: max(150, CGFloat(max(left.count, right.count)) * 48) + topInset)
+            .animation(.easeInOut(duration: 0.3), value: left.count + right.count)
         }
     }
 
-    private func diagram(rows: [Flow]) -> some View {
-        HStack(spacing: 0) {
-            // Left node: income entering the picture.
-            RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                .fill(Color.fbInk.opacity(0.85))
-                .frame(width: nodeWidth)
+    // MARK: Drawing
 
-            // The flow field.
-            GeometryReader { geo in
-                Canvas { context, size in
-                    let gaps = CGFloat(max(rows.count - 1, 0)) * rowGap
-                    let heights = rowHeights(rows, usable: size.height - gaps)
-                    var leftY: CGFloat = gaps / 2 // left stack has no gaps; centre it
-                    var rightY: CGFloat = 0
+    private func draw(left: [Flow], right: [Flow],
+                      in context: inout GraphicsContext, size: CGSize) {
+        // The top inset keeps room for the pool's total label.
+        let fieldHeight = size.height - topInset
+        let leftGaps = CGFloat(max(left.count - 1, 0)) * rowGap
+        let rightGaps = CGFloat(max(right.count - 1, 0)) * rowGap
+        let leftHeights = rowHeights(left, usable: fieldHeight - leftGaps)
+        let rightHeights = rowHeights(right, usable: fieldHeight - rightGaps)
+        let leftSum = leftHeights.reduce(0, +)
+        let rightSum = rightHeights.reduce(0, +)
 
-                    for (index, row) in rows.enumerated() {
-                        let h = heights[index]
+        let cx = size.width * 0.5
+        let poolLeft = cx - nodeWidth / 2
+        let poolRight = cx + nodeWidth / 2
 
-                        var band = Path()
-                        let x1 = size.width
-                        let midX = size.width * 0.5
-                        band.move(to: CGPoint(x: 0, y: leftY))
-                        band.addCurve(to: CGPoint(x: x1, y: rightY),
-                                      control1: CGPoint(x: midX, y: leftY),
-                                      control2: CGPoint(x: midX, y: rightY))
-                        band.addLine(to: CGPoint(x: x1, y: rightY + h))
-                        band.addCurve(to: CGPoint(x: 0, y: leftY + h),
-                                      control1: CGPoint(x: midX, y: rightY + h),
-                                      control2: CGPoint(x: midX, y: leftY + h))
-                        band.closeSubpath()
-
-                        let start = CGPoint(x: 0, y: leftY + h / 2)
-                        let end = CGPoint(x: size.width, y: rightY + h / 2)
-                        if row.isSafe {
-                            context.fill(band, with: .linearGradient(
-                                Gradient(colors: [Color.fbPositive.opacity(0.35),
-                                                  Color.fbPositive.opacity(0.60)]),
-                                startPoint: start, endPoint: end))
-                        } else {
-                            context.fill(band, with: .linearGradient(
-                                Gradient(colors: [Color.white.opacity(0.30),
-                                                  Color.white.opacity(0.14)]),
-                                startPoint: start, endPoint: end))
-                        }
-
-                        leftY += h
-                        rightY += h + rowGap
-                    }
-                }
-            }
-
-            // Right nodes + labels (same height math as the canvas).
-            rightColumn(rows: rows)
-                .frame(width: labelWidth)
+        // Stage 1: income nodes at the left edge → pool (pool stack has
+        // no gaps).
+        var y = topInset
+        var poolY = topInset + (fieldHeight - leftSum) / 2
+        for (index, row) in left.enumerated() {
+            let h = leftHeights[index]
+            node(&context, rect: CGRect(x: 0, y: y, width: nodeWidth, height: h), safe: false)
+            band(&context,
+                 fromX: nodeWidth, fromY: y, fromH: h,
+                 toX: poolLeft, toY: poolY, toH: h,
+                 safe: false)
+            // Income label INSIDE the diagram, to the right of the line.
+            label(&context, row: row,
+                  at: CGPoint(x: nodeWidth + labelInset, y: y + h / 2),
+                  trailing: false)
+            y += h + rowGap
+            poolY += h
         }
-        .frame(height: max(130, CGFloat(rows.count) * 44))
-        .animation(.easeInOut(duration: 0.3), value: rows.count)
+
+        // The balance pool node, capped with the accumulated income.
+        let poolHeight = max(leftSum, rightSum)
+        let poolRect = CGRect(x: poolLeft,
+                              y: topInset + (fieldHeight - poolHeight) / 2,
+                              width: nodeWidth,
+                              height: poolHeight)
+        context.fill(Path(roundedRect: poolRect, cornerRadius: 2.5),
+                     with: .color(Color.fbInk.opacity(0.85)))
+        context.draw(
+            Text(Money.string(income))
+                .font(.fbNumber(11, weight: .semibold))
+                .foregroundStyle(Color.fbInk),
+            at: CGPoint(x: cx, y: poolRect.minY - 6),
+            anchor: .bottom)
+
+        // Stage 2: pool → payment groups at the right edge.
+        var outPoolY = topInset + (fieldHeight - rightSum) / 2
+        var ry = topInset
+        for (index, row) in right.enumerated() {
+            let h = rightHeights[index]
+            node(&context,
+                 rect: CGRect(x: size.width - nodeWidth, y: ry, width: nodeWidth, height: h),
+                 safe: row.isSafe)
+            band(&context,
+                 fromX: poolRight, fromY: outPoolY, fromH: h,
+                 toX: size.width - nodeWidth, toY: ry, toH: h,
+                 safe: row.isSafe, brightAtStart: true)
+            // Expense label INSIDE the diagram, to the left of the line.
+            label(&context, row: row,
+                  at: CGPoint(x: size.width - nodeWidth - labelInset, y: ry + h / 2),
+                  trailing: true)
+            outPoolY += h
+            ry += h + rowGap
+        }
     }
 
-    private func rightColumn(rows: [Flow]) -> some View {
-        GeometryReader { geo in
-            let gaps = CGFloat(max(rows.count - 1, 0)) * rowGap
-            let heights = rowHeights(rows, usable: geo.size.height - gaps)
+    /// One curved band between two vertical slices. `brightAtStart` puts
+    /// the denser end of the gradient at the `from` edge — expenses use it
+    /// so their weight hugs the centre pool.
+    private func band(_ context: inout GraphicsContext,
+                      fromX: CGFloat, fromY: CGFloat, fromH: CGFloat,
+                      toX: CGFloat, toY: CGFloat, toH: CGFloat,
+                      safe: Bool, brightAtStart: Bool = false) {
+        var path = Path()
+        let midX = (fromX + toX) / 2
+        path.move(to: CGPoint(x: fromX, y: fromY))
+        path.addCurve(to: CGPoint(x: toX, y: toY),
+                      control1: CGPoint(x: midX, y: fromY),
+                      control2: CGPoint(x: midX, y: toY))
+        path.addLine(to: CGPoint(x: toX, y: toY + toH))
+        path.addCurve(to: CGPoint(x: fromX, y: fromY + fromH),
+                      control1: CGPoint(x: midX, y: toY + toH),
+                      control2: CGPoint(x: midX, y: fromY + fromH))
+        path.closeSubpath()
 
-            VStack(alignment: .leading, spacing: rowGap) {
-                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                    HStack(spacing: 8) {
-                        Group {
-                            if row.isSafe {
-                                StripedFill(color: Color.fbPositive, lineWidth: 1.8, spacing: 4.5)
-                                    .background(Color.fbPositive.opacity(0.12))
-                            } else {
-                                Color.white.opacity(0.35)
-                            }
-                        }
-                        .frame(width: nodeWidth)
-                        .clipShape(RoundedRectangle(cornerRadius: 2.5, style: .continuous))
-
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(row.name)
-                                .font(.fbBody(12, weight: row.isSafe ? .semibold : .medium))
-                                .foregroundStyle(row.isSafe ? Color.fbInk : Color.fbSoftText)
-                                .lineLimit(1)
-                            Text("\(Money.string(row.amount)) · \(percent(row.amount))")
-                                .font(.fbNumber(10))
-                                .foregroundStyle(Color.fbSoftText)
-                                .lineLimit(1)
-                        }
-                    }
-                    .frame(height: heights[index], alignment: .center)
-                }
-            }
+        let start = CGPoint(x: fromX, y: fromY + fromH / 2)
+        let end = CGPoint(x: toX, y: toY + toH / 2)
+        if safe {
+            context.fill(path, with: .linearGradient(
+                Gradient(colors: [Color.fbPositive.opacity(0.3),
+                                  Color.fbPositive.opacity(0.07)]),
+                startPoint: start, endPoint: end))
+        } else {
+            let opacities: [Double] = brightAtStart ? [0.3, 0.07] : [0.07, 0.3]
+            context.fill(path, with: .linearGradient(
+                Gradient(colors: opacities.map { Color.fbInk.opacity($0) }),
+                startPoint: start, endPoint: end))
         }
+    }
+
+    /// A node bar at either edge. The safe node keeps the hatched look.
+    private func node(_ context: inout GraphicsContext, rect: CGRect, safe: Bool) {
+        let shape = Path(roundedRect: rect, cornerRadius: 2.5)
+        if safe {
+            context.drawLayer { layer in
+                layer.clip(to: shape)
+                layer.fill(shape, with: .color(Color.fbPositive.opacity(0.12)))
+                var stripes = Path()
+                var x = rect.minX - rect.height
+                while x < rect.maxX {
+                    stripes.move(to: CGPoint(x: x, y: rect.maxY))
+                    stripes.addLine(to: CGPoint(x: x + rect.height, y: rect.minY))
+                    x += 4.5
+                }
+                layer.stroke(stripes, with: .color(Color.fbPositive), lineWidth: 1.8)
+            }
+        } else {
+            context.fill(shape, with: .color(Color.fbInk.opacity(0.35)))
+        }
+    }
+
+    /// Two-line label drawn inside the flow field. `trailing` anchors the
+    /// text's trailing edge at `point` (expense side).
+    private func label(_ context: inout GraphicsContext, row: Flow,
+                       at point: CGPoint, trailing: Bool) {
+        let anchor: UnitPoint = trailing ? .trailing : .leading
+        // Safe-to-spend keeps plain white text over its band.
+        let name = Text(row.name)
+            .font(.fbBody(11, weight: row.isSafe ? .semibold : .medium))
+            .foregroundStyle(row.isSafe ? Color.white : Color.fbInk.opacity(0.85))
+        let value = Text("\(Money.string(row.amount)) · \(percent(row.amount))")
+            .font(.fbNumber(9))
+            .foregroundStyle(row.isSafe ? Color.white.opacity(0.8) : Color.fbSoftText)
+
+        context.draw(name, at: CGPoint(x: point.x, y: point.y - 7), anchor: anchor)
+        context.draw(value, at: CGPoint(x: point.x, y: point.y + 7), anchor: anchor)
     }
 
     private func percent(_ amount: Double) -> String {
@@ -195,7 +248,7 @@ struct SankeyView: View {
 #Preview {
     let f = Finances.sample
     return Card {
-        SankeyView(income: f.income.amount,
+        SankeyView(sources: f.incomeSources,
                    recurringTotal: f.recurringCommitments.reduce(0) { $0 + $1.amount },
                    oneOffTotal: f.oneOffCosts.reduce(0) { $0 + $1.amount })
     }

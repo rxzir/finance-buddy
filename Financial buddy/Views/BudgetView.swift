@@ -2,25 +2,21 @@
 //  BudgetView.swift
 //  Finance buddy
 //
-//  One scrollable screen, three cards, no duplicated numbers:
-//  1. TODAY — safe-to-spend hero (the only place it appears here),
-//     the commitment bar, days to payday. Pencil edits balance/income/payday.
-//  2. COMMITMENTS — recurring + one-offs merged into one list sorted by
-//     next due date, split visually at payday. Pencil manages the items.
-//  3. MONTHLY HEADROOM — income minus recurring. No edit icon; its inputs
-//     are already editable from the two cards above.
+//  One scrollable screen:
+//  1. TODAY — safe-to-spend hero floating on the background (no card),
+//     then a card with the month bar / flow view. Pencil edits
+//     balance/payday/income.
+//  2. UPCOMING PAYMENTS — recurring + one-offs merged into one list
+//     sorted by next due date; everything after payday sits under a
+//     "Next month" divider. Pencil manages the items.
 //
 
 import SwiftUI
 
 struct BudgetView: View {
     @Bindable var store: FinanceBuddyStore
-
-    enum ActiveOverlay {
-        case editToday
-        case manageCommitments
-    }
-    @State private var overlay: ActiveOverlay?
+    /// Asks the root to present a modal (rendered above the tab bar).
+    var present: (AppModal) -> Void = { _ in }
 
     /// How the Today card visualises the balance being spent.
     enum ChartStyle: String, CaseIterable {
@@ -33,6 +29,7 @@ struct BudgetView: View {
         }
     }
     @State private var chartStyle: ChartStyle = .bar
+    @State private var barSelection: BarSegmentInfo?
 
     private var finances: Finances { store.finances }
 
@@ -43,23 +40,15 @@ struct BudgetView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     header
-                    todayCard
+                    hero
+                    chartCard
                     commitmentsCard
-                    headroomCard
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 4)
                 .padding(.bottom, 24)
             }
-
-            switch overlay {
-            case .editToday:
-                EditTodayOverlay(store: store) { overlay = nil }
-            case .manageCommitments:
-                ManageCommitmentsOverlay(store: store) { overlay = nil }
-            case nil:
-                EmptyView()
-            }
+            .scrollEdgeEffectStyle(.soft, for: .vertical)
         }
     }
 
@@ -76,72 +65,105 @@ struct BudgetView: View {
 
     // MARK: 1. Today
 
-    private var todayCard: some View {
+    /// The hero floats directly on the background — no card chrome.
+    private var hero: some View {
         let safe = finances.safeToSpendToday()
         let days = finances.daysUntilPayday()
         let isOverspent = safe < 0
 
-        return Card {
+        return VStack(spacing: 4) {
+            Text(isOverspent ? "OVERSPENT" : "SAFE TO SPEND")
+                .font(.fbBody(12, weight: .semibold))
+                .tracking(1.4)
+                .foregroundStyle(Color.fbSoftText)
+            // The hero pairs safe-to-spend with the balance it comes from.
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(Money.string(safe))
+                    .font(.fbNumber(44, weight: .bold))
+                    .foregroundStyle(isOverspent ? Color.fbWarning : Color.fbInk)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .contentTransition(.numericText(value: safe))
+                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: safe)
+                Text("of \(Money.string(finances.balance))")
+                    .font(.fbNumber(15, weight: .medium))
+                    .foregroundStyle(Color.fbSoftText)
+                    .contentTransition(.numericText(value: finances.balance))
+                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: finances.balance)
+            }
+            Text(days == 0 ? "Payday is today" : "\(days) day\(days == 1 ? "" : "s") until payday")
+                .font(.fbBody(14, weight: .medium))
+                .foregroundStyle(Color.fbSoftText)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+    }
+
+    private var chartCard: some View {
+        Card {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top) {
                     chartToggle
                     Spacer()
-                    pencilButton { overlay = .editToday }
+                    pencilButton { present(.editToday) }
                 }
 
-                // The hero — the only place safe-to-spend is shown.
-                VStack(spacing: 4) {
-                    Text(isOverspent ? "OVERSPENT" : "SAFE TO SPEND")
-                        .font(.fbBody(12, weight: .semibold))
-                        .tracking(1.4)
-                        .foregroundStyle(Color.fbSoftText)
-                    Text(Money.string(safe))
-                        .font(.fbNumber(44, weight: .bold))
-                        .foregroundStyle(isOverspent ? Color.fbWarning : Color.fbInk)
-                        .minimumScaleFactor(0.5)
-                        .lineLimit(1)
-                        .contentTransition(.numericText(value: safe))
-                        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: safe)
-                    Text(days == 0 ? "Payday is today" : "\(days) day\(days == 1 ? "" : "s") until payday")
-                        .font(.fbBody(14, weight: .medium))
-                        .foregroundStyle(Color.fbSoftText)
-                }
-                .frame(maxWidth: .infinity)
-
-                // Balance context + one of two visuals (no legend — the
-                // itemized list is the Upcoming payments card below).
-                HStack {
-                    Text("Balance")
-                        .font(.fbBody(14))
-                        .foregroundStyle(Color.fbSoftText)
-                    Spacer()
-                    Text(Money.string(finances.balance))
-                        .font(.fbNumber(15, weight: .semibold))
-                        .foregroundStyle(Color.fbInk)
-                        .contentTransition(.numericText(value: finances.balance))
-                        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: finances.balance)
-                }
+                // Details of a tapped bar segment; nothing otherwise (the
+                // balance lives in the hero, the chart shows the income).
+                contextRow
 
                 switch chartStyle {
                 case .bar:
-                    BalanceBar(balance: finances.balance,
-                               obligations: finances.upcomingObligations(),
-                               safeToSpend: safe,
-                               showsLegend: false)
-                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                    BalanceBar(completed: finances.paidThisMonth(),
+                               pending: finances.upcomingObligations(),
+                               safeToSpend: finances.safeToSpendToday(),
+                               selection: $barSelection)
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
                 case .sankey:
-                    // Income split into the three groups (recurring /
-                    // one-time / what's left) — a monthly view, unlike
-                    // the balance-based bar.
-                    SankeyView(income: finances.income.amount,
+                    // Income (recurring/one-time) into the three groups —
+                    // a monthly view, unlike the balance-based bar.
+                    SankeyView(sources: finances.incomeSources,
                                recurringTotal: finances.recurringCommitments.reduce(0) { $0 + $1.amount },
                                oneOffTotal: finances.upcomingSchedule()
-                                   .filter { if case .oneOff = $0.kind { return true }; return false }
-                                   .reduce(0) { $0 + $1.amount })
-                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                        .filter { if case .oneOff = $0.kind { return true }; return false }
+                        .reduce(0) { $0 + $1.amount })
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var contextRow: some View {
+        if chartStyle == .bar, let sel = barSelection {
+            HStack(spacing: 8) {
+                
+                Text(sel.name + " · \(sel.percent)%")
+                    .font(.fbBody(14, weight: .medium))
+                    .foregroundStyle(Color.fbInk)
+                    .lineLimit(1)
+                Spacer()
+                Text((sel.isCompleted ? "paid · " : "") + "\(Money.string(sel.amount))")
+                    .font(.fbNumber(15, weight: .semibold))
+                    .foregroundStyle(Color.fbInk)
+            }
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
+    private func selectionSwatch(_ sel: BarSegmentInfo) -> some View {
+        Group {
+            if sel.isSafe {
+                StripedFill(color: Color.fbPositive, lineWidth: 1.5, spacing: 4)
+                    .background(Color.fbPositive.opacity(0.12))
+            } else if sel.isCompleted {
+                Color.fbCommitment.opacity(0.30)
+            } else {
+                Color.fbInk
+            }
+        }
+        .frame(width: 12, height: 12)
+        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
     }
 
     /// Two tiny icons flipping the Today visual between the eaten bar and
@@ -152,6 +174,7 @@ struct BudgetView: View {
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                         chartStyle = style
+                        barSelection = nil
                     }
                 } label: {
                     Image(systemName: style.icon)
@@ -160,7 +183,7 @@ struct BudgetView: View {
                         .frame(width: 30, height: 26)
                         .background(
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(chartStyle == style ? Color.white.opacity(0.10) : .clear)
+                                .fill(chartStyle == style ? Color.fbInk.opacity(0.10) : .clear)
                         )
                 }
                 .buttonStyle(.pressable)
@@ -170,7 +193,7 @@ struct BudgetView: View {
         .padding(2)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(0.04))
+                .fill(Color.fbInk.opacity(0.04))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -182,7 +205,7 @@ struct BudgetView: View {
 
     private var commitmentsCard: some View {
         let schedule = finances.upcomingSchedule()
-        let payday = Calendar.current.startOfDay(for: finances.income.nextPayDate)
+        let payday = finances.nextPayday()
         let before = schedule.filter { $0.date <= payday }
         let after = schedule.filter { $0.date > payday }
 
@@ -191,7 +214,7 @@ struct BudgetView: View {
                 HStack {
                     cardTitle("Upcoming payments")
                     Spacer()
-                    pencilButton { overlay = .manageCommitments }
+                    pencilButton { present(.managePayments) }
                 }
 
                 if schedule.isEmpty {
@@ -199,18 +222,15 @@ struct BudgetView: View {
                         .font(.fbBody(14))
                         .foregroundStyle(Color.fbSoftText)
                 } else {
-                    if !before.isEmpty {
-                        sectionLabel("Before payday")
-                        ForEach(before) { item in
-                            scheduleRow(item, emphasised: true)
-                        }
+                    ForEach(before) { item in
+                        scheduleRow(item, emphasised: true)
                     }
 
                     if !after.isEmpty {
                         if !before.isEmpty {
                             Divider().overlay(Color.fbHairline).padding(.vertical, 2)
                         }
-                        sectionLabel("After payday")
+                        sectionLabel("Next month")
                         ForEach(after) { item in
                             scheduleRow(item, emphasised: false)
                         }
@@ -232,72 +252,33 @@ struct BudgetView: View {
         let isRecurring: Bool
         if case .recurring = item.kind { isRecurring = true } else { isRecurring = false }
 
-        return HStack(spacing: 10) {
+        return HStack(spacing: 12) {
+            // A contained icon keeps every row the same height and lets
+            // the name/date block align cleanly beside it.
             Image(systemName: isRecurring ? "repeat" : "calendar")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(emphasised ? Color.fbCommitment : Color.fbSoftText)
-                .frame(width: 16)
-
-            Text(item.name)
-                .font(.fbBody(15, weight: emphasised ? .semibold : .regular))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(emphasised ? Color.fbInk : Color.fbSoftText)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(Color.fbInk.opacity(0.05)))
+                .overlay(Circle().strokeBorder(Color.fbHairline, lineWidth: 1))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .font(.fbBody(15, weight: emphasised ? .semibold : .regular))
+                    .foregroundStyle(emphasised ? Color.fbInk : Color.fbSoftText)
+                Text(item.date.formatted(.dateTime.day().month(.abbreviated)))
+                    .font(.fbBody(12))
+                    .foregroundStyle(Color.fbSoftText)
+            }
 
             Spacer()
-
-            Text(item.date.formatted(.dateTime.day().month(.abbreviated)))
-                .font(.fbBody(13))
-                .foregroundStyle(Color.fbSoftText)
 
             Text(Money.string(item.amount))
                 .font(.fbNumber(15, weight: emphasised ? .semibold : .regular))
                 .foregroundStyle(emphasised ? Color.fbInk : Color.fbSoftText)
                 .frame(minWidth: 64, alignment: .trailing)
         }
-        .padding(.vertical, 3)
-    }
-
-    // MARK: 3. Monthly headroom (read-only — inputs live in cards 1 & 2)
-
-    private var headroomCard: some View {
-        let recurringTotal = finances.recurringCommitments.reduce(0) { $0 + $1.amount }
-        let headroom = finances.monthlyHeadroom
-
-        return Card {
-            VStack(alignment: .leading, spacing: 12) {
-                cardTitle("Monthly headroom")
-
-                row("Monthly income", Money.string(finances.income.amount))
-                row("Recurring commitments", Money.string(-recurringTotal), muted: true)
-
-                Divider().overlay(Color.fbHairline)
-
-                HStack {
-                    Text("Headroom")
-                        .font(.fbBody(16, weight: .semibold))
-                        .foregroundStyle(Color.fbInk)
-                    Spacer()
-                    Text(Money.string(headroom))
-                        .font(.fbNumber(17, weight: .bold))
-                        .foregroundStyle(headroom < 0 ? Color.fbWarning : Color.fbPositive)
-                }
-
-                Text("What's left each month once every regular commitment is paid.")
-                    .font(.fbBody(13))
-                    .foregroundStyle(Color.fbSoftText)
-            }
-        }
-    }
-
-    private func row(_ label: String, _ value: String, muted: Bool = false) -> some View {
-        HStack {
-            Text(label)
-                .font(.fbBody(15))
-                .foregroundStyle(muted ? Color.fbSoftText : Color.fbInk)
-            Spacer()
-            Text(value)
-                .font(.fbNumber(15))
-                .foregroundStyle(muted ? Color.fbSoftText : Color.fbInk)
-        }
+        .padding(.vertical, 4)
     }
 
     // MARK: Shared bits
@@ -315,7 +296,7 @@ struct BudgetView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color.fbSoftText)
                 .frame(width: 30, height: 30)
-                .background(Circle().fill(Color.white.opacity(0.05)))
+                .background(Circle().fill(Color.fbInk.opacity(0.05)))
                 .overlay(Circle().strokeBorder(Color.fbHairline, lineWidth: 1))
         }
         .buttonStyle(.pressable)
@@ -324,6 +305,8 @@ struct BudgetView: View {
 }
 
 #Preview {
-    BudgetView(store: FinanceBuddyStore(finances: .sample))
-        .preferredColorScheme(.dark)
+    let store = FinanceBuddyStore(finances: .sample)
+    return PreviewModalHost(store: store) { present in
+        BudgetView(store: store, present: present)
+    }
 }

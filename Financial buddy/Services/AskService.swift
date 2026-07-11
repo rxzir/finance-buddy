@@ -43,8 +43,8 @@ struct FinancialSnapshot: Encodable {
 
     init(_ f: Finances) {
         balance = f.balance
-        incomeAmount = f.income.amount
-        nextPayDate = f.income.nextPayDate
+        incomeAmount = f.totalIncome
+        nextPayDate = f.nextPayday()
         daysUntilPayday = f.daysUntilPayday()
         safeToSpendToday = f.safeToSpendToday()
         monthlyHeadroom = f.monthlyHeadroom

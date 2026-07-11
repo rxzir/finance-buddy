@@ -2,185 +2,149 @@
 //  BalanceBar.swift
 //  Finance buddy
 //
-//  The signature visual: a horizontal bar the full width of which is the
-//  current balance. Each upcoming commitment "eats" a chunk proportional
-//  to its amount; whatever is left over is what's safe to spend.
+//  The signature visual: a horizontal bar of the month's money. Payments
+//  already made are faded grey, payments still pending before payday are
+//  white, and the hatched remainder is what's safe to spend. Tapping a
+//  segment makes it glow while the rest fade; the tapped segment's info
+//  is published to the parent (which swaps it into the balance row).
 //
 
 import SwiftUI
 
+/// What the parent shows for a tapped segment.
+struct BarSegmentInfo: Equatable {
+    var name: String
+    var amount: Double
+    var percent: Int
+    var isSafe: Bool
+    var isCompleted: Bool
+}
+
 struct BalanceBar: View {
-    let balance: Double
-    let obligations: [Obligation]
+    /// Payments that already left the account this month (faded grey).
+    let completed: [Obligation]
+    /// Payments still to come before payday (white).
+    let pending: [Obligation]
     let safeToSpend: Double
+    /// The tapped segment, surfaced to the parent. Nil when nothing is
+    /// selected.
+    @Binding var selection: BarSegmentInfo?
 
     private let barHeight: CGFloat = 34
     private let gap: CGFloat = 2
 
-    /// The bar always fills its width. If commitments exceed the balance we
-    /// scale against the commitments so the overspend is still visible.
-    private var denominator: Double {
-        max(balance, obligations.reduce(0) { $0 + $1.amount }, 0.01)
-    }
-
-    private var isOverspent: Bool { safeToSpend < 0 }
-
-    /// Distinct-but-related shades of the commitment blue so adjacent
-    /// segments read as separate without turning into a rainbow.
-    private func shade(for index: Int) -> Color {
-        let steps = max(obligations.count - 1, 1)
-        let t = Double(index) / Double(steps)          // 0...1
-        return Color.fbCommitment.opacity(1.0 - t * 0.45)
-    }
-
-    /// Set false to render just the bar (e.g. when an itemized list lives
-    /// elsewhere on the same screen and the legend would duplicate it).
-    var showsLegend: Bool = true
-
-    /// Tapped segment — shows a name / amount / percentage readout.
-    private enum Selection: Equatable {
-        case obligation(UUID)
+    private enum SegmentID: Equatable {
+        case completed(UUID)
+        case pending(UUID)
         case safe
     }
-    @State private var selection: Selection?
+    @State private var selectedID: SegmentID?
+
+    private var showsSafe: Bool { safeToSpend > 0 }
+
+    /// The whole bar is the month: done + pending + what's left.
+    private var denominator: Double {
+        let total = completed.reduce(0) { $0 + $1.amount }
+            + pending.reduce(0) { $0 + $1.amount }
+            + max(safeToSpend, 0)
+        return max(total, 0.01)
+    }
+
+    private var segmentCount: Int {
+        completed.count + pending.count + (showsSafe ? 1 : 0)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            GeometryReader { geo in
-                let width = geo.size.width
-                HStack(spacing: gap) {
-                    ForEach(Array(obligations.enumerated()), id: \.element.id) { index, ob in
+        GeometryReader { geo in
+            let width = geo.size.width
+            HStack(spacing: gap) {
+                ForEach(completed) { ob in
+                    // Past payments highlight with a white stroke — a fill
+                    // change reads poorly on the muted grey.
+                    segment(id: .completed(ob.id), width: segmentWidth(ob.amount, in: width),
+                            glows: false) { isSelected in
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(shade(for: index))
+                            .fill(Color.fbCommitment.opacity(0.30))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                    .strokeBorder(Color.fbInk.opacity(
-                                        selection == .obligation(ob.id) ? 0.9 : 0), lineWidth: 1.5)
+                                    .strokeBorder(Color.white.opacity(isSelected ? 0.9 : 0),
+                                                  lineWidth: 1.5)
                             )
-                            .frame(width: max(2, segmentWidth(ob.amount, in: width)))
-                            .contentShape(Rectangle())
-                            .onTapGesture { toggle(.obligation(ob.id)) }
                     }
+                }
 
-                    if !isOverspent {
-                        // Safe-to-spend reads as "open space": diagonal
-                        // hatching instead of a solid block.
-                        StripedFill(color: Color.fbPositive)
-                            .background(Color.fbPositive.opacity(0.10))
+                ForEach(pending) { ob in
+                    segment(id: .pending(ob.id), width: segmentWidth(ob.amount, in: width)) { _ in
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(Color.fbInk)
+                    }
+                }
+
+                if showsSafe {
+                    // Safe-to-spend answers a tap by going fully opaque —
+                    // no glow on the hatching.
+                    segment(id: .safe, width: segmentWidth(safeToSpend, in: width),
+                            glows: false) { isSelected in
+                        StripedFill(color: Color.fbPositive.opacity(isSelected ? 1 : 0.50))
+                            .background(Color.fbPositive.opacity(isSelected ? 0.18 : 0.10))
                             .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                    .strokeBorder(Color.fbInk.opacity(
-                                        selection == .safe ? 0.9 : 0), lineWidth: 1.5)
-                            )
-                            .frame(width: max(2, segmentWidth(safeToSpend, in: width)))
-                            .contentShape(Rectangle())
-                            .onTapGesture { toggle(.safe) }
                     }
                 }
             }
-            .frame(height: barHeight)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-            if let selection {
-                detailChip(for: selection)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
-            if showsLegend {
-                legend
-            }
         }
+        .frame(height: barHeight)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    private func toggle(_ new: Selection) {
+    /// Shared per-segment treatment: tap to select, fade when something
+    /// else is. The shape builder gets the selected flag so each segment
+    /// type styles its own selected state; `glows` adds the halo.
+    private func segment<S: View>(id: SegmentID, width: CGFloat, glows: Bool = true,
+                                  @ViewBuilder shape: (Bool) -> S) -> some View {
+        let isSelected = selectedID == id
+        let somethingSelected = selectedID != nil
+        return shape(isSelected)
+            .frame(width: max(2, width))
+            .opacity(!somethingSelected || isSelected ? 1 : 0.3)
+            .shadow(color: Color.fbInk.opacity(glows && isSelected ? 0.65 : 0),
+                    radius: glows && isSelected ? 7 : 0)
+            .contentShape(Rectangle())
+            .onTapGesture { toggle(id) }
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: selectedID)
+    }
+
+    private func toggle(_ id: SegmentID) {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            selection = (selection == new) ? nil : new
+            selectedID = (selectedID == id) ? nil : id
+            selection = selectedID.flatMap(info(for:))
         }
     }
 
-    // MARK: Tap readout
-
-    /// Name, amount and share of the balance for the tapped segment.
-    private func detailChip(for selection: Selection) -> some View {
-        let name: String
-        let amount: Double
-        let isSafe: Bool
-
-        switch selection {
+    private func info(for id: SegmentID) -> BarSegmentInfo? {
+        func percent(_ amount: Double) -> Int {
+            Int((amount / denominator * 100).rounded())
+        }
+        switch id {
         case .safe:
-            name = "Safe to spend"
-            amount = safeToSpend
-            isSafe = true
-        case .obligation(let id):
-            let ob = obligations.first { $0.id == id }
-            name = ob?.name ?? ""
-            amount = ob?.amount ?? 0
-            isSafe = false
+            return BarSegmentInfo(name: "Safe to spend", amount: safeToSpend,
+                                  percent: percent(safeToSpend), isSafe: true,
+                                  isCompleted: false)
+        case .completed(let uuid):
+            guard let ob = completed.first(where: { $0.id == uuid }) else { return nil }
+            return BarSegmentInfo(name: ob.name, amount: ob.amount,
+                                  percent: percent(ob.amount), isSafe: false,
+                                  isCompleted: true)
+        case .pending(let uuid):
+            guard let ob = pending.first(where: { $0.id == uuid }) else { return nil }
+            return BarSegmentInfo(name: ob.name, amount: ob.amount,
+                                  percent: percent(ob.amount), isSafe: false,
+                                  isCompleted: false)
         }
-
-        let percent = denominator > 0 ? Int((amount / denominator * 100).rounded()) : 0
-
-        return HStack(spacing: 8) {
-            Group {
-                if isSafe {
-                    StripedFill(color: Color.fbPositive, lineWidth: 1.5, spacing: 4)
-                        .background(Color.fbPositive.opacity(0.12))
-                } else {
-                    Color.fbCommitment
-                }
-            }
-            .frame(width: 12, height: 12)
-            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
-
-            Text(name)
-                .font(.fbBody(13, weight: .semibold))
-                .foregroundStyle(Color.fbInk)
-                .lineLimit(1)
-            Text(Money.string(amount))
-                .font(.fbNumber(13, weight: .semibold))
-                .foregroundStyle(Color.fbInk)
-            Text("· \(percent)%")
-                .font(.fbBody(13))
-                .foregroundStyle(Color.fbSoftText)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Capsule().fill(Color.white.opacity(0.06)))
-        .overlay(Capsule().strokeBorder(Color.fbHairline, lineWidth: 1))
     }
 
     private func segmentWidth(_ amount: Double, in totalWidth: CGFloat) -> CGFloat {
-        let available = totalWidth - CGFloat(max(obligations.count, 1)) * gap
+        let available = totalWidth - CGFloat(max(segmentCount - 1, 0)) * gap
         return CGFloat(amount / denominator) * available
-    }
-
-    private var legend: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(obligations.enumerated()), id: \.element.id) { index, ob in
-                legendRow(swatch: shade(for: index), name: ob.name, amount: ob.amount)
-            }
-            Divider().overlay(Color.fbHairline)
-            legendRow(swatch: isOverspent ? .fbWarning : .fbPositive,
-                      name: isOverspent ? "Overspent" : "Safe to spend",
-                      amount: safeToSpend,
-                      emphasised: true)
-        }
-    }
-
-    private func legendRow(swatch: Color, name: String, amount: Double, emphasised: Bool = false) -> some View {
-        HStack(spacing: 10) {
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(swatch)
-                .frame(width: 12, height: 12)
-            Text(name)
-                .font(.fbBody(15, weight: emphasised ? .semibold : .regular))
-                .foregroundStyle(Color.fbInk)
-            Spacer()
-            Text(Money.string(amount))
-                .font(.fbNumber(15, weight: emphasised ? .semibold : .regular))
-                .foregroundStyle(emphasised ? (amount < 0 ? Color.fbWarning : Color.fbPositive) : Color.fbSoftText)
-        }
     }
 }
 
@@ -210,16 +174,28 @@ struct StripedFill: View {
 }
 
 #Preview {
-    let f = Finances.sample
-    return VStack {
-        Card {
-            BalanceBar(balance: f.balance,
-                        obligations: f.upcomingObligations(),
-                        safeToSpend: f.safeToSpendToday())
+    struct BarPreview: View {
+        @State private var selection: BarSegmentInfo?
+        let f = Finances.sample
+        var body: some View {
+            Card {
+                VStack(alignment: .leading, spacing: 12) {
+                    if let selection {
+                        Text("\(selection.name) · \(Money.string(selection.amount)) · \(selection.percent)%")
+                            .font(.fbBody(13))
+                            .foregroundStyle(Color.fbInk)
+                    }
+                    BalanceBar(completed: f.paidThisMonth(),
+                               pending: f.upcomingObligations(),
+                               safeToSpend: f.safeToSpendToday(),
+                               selection: $selection)
+                }
+            }
+            .padding()
         }
-        .padding()
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Color.fbBackground)
-    .preferredColorScheme(.dark)
+    return BarPreview()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.fbBackground)
+        .preferredColorScheme(.dark)
 }

@@ -45,14 +45,28 @@ struct OneOffCost: Identifiable, Codable, Equatable, Hashable {
     }
 }
 
-/// Regular income and when the next pay lands.
-struct Income: Codable, Equatable, Hashable {
+/// One stream of money coming in — salary, refunds, bonuses… Mirrors the
+/// payments split: recurring streams repeat monthly, one-offs land once.
+struct IncomeSource: Identifiable, Codable, Equatable, Hashable {
+    let id: UUID
+    var name: String
     var amount: Double
-    var nextPayDate: Date
+    var isRecurring: Bool
+    var category: String
+    /// When the money lands. For recurring income this anchors the monthly
+    /// cycle (it repeats on this day of the month); the soonest recurring
+    /// occurrence across all sources IS the next payday.
+    var date: Date
 
-    init(amount: Double, nextPayDate: Date) {
+    init(id: UUID = UUID(), name: String, amount: Double,
+         isRecurring: Bool = true, category: String = "General",
+         date: Date = Date()) {
+        self.id = id
+        self.name = name
         self.amount = amount
-        self.nextPayDate = nextPayDate
+        self.isRecurring = isRecurring
+        self.category = category
+        self.date = date
     }
 }
 
@@ -60,18 +74,43 @@ struct Income: Codable, Equatable, Hashable {
 /// only ever needs one value.
 struct Finances: Codable, Equatable {
     var balance: Double
-    var income: Income
+    /// Money coming in each month, from any number of avenues.
+    var incomeSources: [IncomeSource]
     var recurringCommitments: [RecurringCommitment]
     var oneOffCosts: [OneOffCost]
+    /// User-editable category lists (managed from the Profile screen).
+    var paymentCategories: [String]
+    var incomeCategories: [String]
+
+    static let defaultPaymentCategories = ["General", "Housing", "Utilities", "Subscriptions",
+                                           "Health", "Transport", "Insurance", "Debt"]
+    static let defaultIncomeCategories = ["General", "Salary", "Freelance", "Refunds", "Gifts"]
+
+    /// All monthly income combined.
+    var totalIncome: Double {
+        incomeSources.reduce(0) { $0 + $1.amount }
+    }
+
+    var recurringIncome: Double {
+        incomeSources.filter(\.isRecurring).reduce(0) { $0 + $1.amount }
+    }
+
+    var oneOffIncome: Double {
+        incomeSources.filter { !$0.isRecurring }.reduce(0) { $0 + $1.amount }
+    }
 
     init(balance: Double,
-         income: Income,
+         incomeSources: [IncomeSource] = [],
          recurringCommitments: [RecurringCommitment] = [],
-         oneOffCosts: [OneOffCost] = []) {
+         oneOffCosts: [OneOffCost] = [],
+         paymentCategories: [String] = Finances.defaultPaymentCategories,
+         incomeCategories: [String] = Finances.defaultIncomeCategories) {
         self.balance = balance
-        self.income = income
+        self.incomeSources = incomeSources
         self.recurringCommitments = recurringCommitments
         self.oneOffCosts = oneOffCosts
+        self.paymentCategories = paymentCategories
+        self.incomeCategories = incomeCategories
     }
 }
 
@@ -130,12 +169,26 @@ extension Finances {
         return startOfReference
     }
 
+    /// The next payday — the soonest upcoming occurrence of any recurring
+    /// income. Each recurring income repeats monthly on the day of its
+    /// anchor date. Falls back to today when no recurring income exists.
+    func nextPayday(asOf today: Date = Date(),
+                    calendar: Calendar = .current) -> Date {
+        let start = calendar.startOfDay(for: today)
+        let candidates = incomeSources.filter(\.isRecurring).map {
+            Finances.nextOccurrence(ofDueDay: calendar.component(.day, from: $0.date),
+                                    onOrAfter: start,
+                                    calendar: calendar)
+        }
+        return candidates.min() ?? start
+    }
+
     /// Every commitment and one-off cost whose next occurrence lands in the
-    /// window [today, nextPayDate], inclusive, sorted by date.
+    /// window [today, next payday], inclusive, sorted by date.
     func upcomingObligations(asOf today: Date = Date(),
                              calendar: Calendar = .current) -> [Obligation] {
         let start = calendar.startOfDay(for: today)
-        let end = calendar.startOfDay(for: income.nextPayDate)
+        let end = nextPayday(asOf: today, calendar: calendar)
 
         // If payday is in the past or today, there is no window to draw from.
         guard end >= start else { return [] }
@@ -203,6 +256,44 @@ extension Finances {
         return result.sorted { $0.date < $1.date }
     }
 
+    /// Payments that have already landed this month — recurring commitments
+    /// whose due day has passed and one-offs dated earlier in the month.
+    /// The bar renders these as the faded "done" segments.
+    func paidThisMonth(asOf today: Date = Date(),
+                       calendar: Calendar = .current) -> [Obligation] {
+        let start = calendar.startOfDay(for: today)
+        guard let monthStart = calendar.dateInterval(of: .month, for: start)?.start else {
+            return []
+        }
+        var result: [Obligation] = []
+
+        for commitment in recurringCommitments {
+            let occurrence = Finances.nextOccurrence(ofDueDay: commitment.dueDay,
+                                                     onOrAfter: monthStart,
+                                                     calendar: calendar)
+            if occurrence >= monthStart && occurrence < start {
+                result.append(Obligation(id: commitment.id,
+                                         name: commitment.name,
+                                         amount: commitment.amount,
+                                         date: occurrence,
+                                         kind: .recurring(commitment)))
+            }
+        }
+
+        for cost in oneOffCosts {
+            let day = calendar.startOfDay(for: cost.date)
+            if day >= monthStart && day < start {
+                result.append(Obligation(id: cost.id,
+                                         name: cost.name,
+                                         amount: cost.amount,
+                                         date: day,
+                                         kind: .oneOff(cost)))
+            }
+        }
+
+        return result.sorted { $0.date < $1.date }
+    }
+
     /// Balance minus every obligation that lands before (and including)
     /// payday. This is the hero number.
     func safeToSpendToday(asOf today: Date = Date(),
@@ -215,14 +306,14 @@ extension Finances {
     /// Income minus the sum of all recurring commitments — the room you
     /// have across a whole month, independent of the current balance.
     var monthlyHeadroom: Double {
-        income.amount - recurringCommitments.reduce(0) { $0 + $1.amount }
+        totalIncome - recurringCommitments.reduce(0) { $0 + $1.amount }
     }
 
     /// Whole days from `today` until the next pay date (never negative).
     func daysUntilPayday(asOf today: Date = Date(),
                          calendar: Calendar = .current) -> Int {
         let start = calendar.startOfDay(for: today)
-        let payday = calendar.startOfDay(for: income.nextPayDate)
+        let payday = nextPayday(asOf: today, calendar: calendar)
         let days = calendar.dateComponents([.day], from: start, to: payday).day ?? 0
         return max(0, days)
     }
@@ -239,21 +330,30 @@ extension Finances {
         }
         return Finances(
             balance: 2140,
-            income: Income(amount: 2600, nextPayDate: daysFromNow(18)),
+            incomeSources: [
+                IncomeSource(name: "Salary", amount: 2400, isRecurring: true,
+                             category: "Salary", date: daysFromNow(18)),
+                IncomeSource(name: "Refund", amount: 120, isRecurring: false,
+                             category: "Refunds", date: daysFromNow(4)),
+                IncomeSource(name: "Bonus", amount: 80, isRecurring: false,
+                             category: "Salary", date: daysFromNow(10)),
+            ],
             recurringCommitments: [
                 RecurringCommitment(name: "Rent", amount: 950, dueDay: cal.component(.day, from: daysFromNow(9)), category: "Housing"),
                 RecurringCommitment(name: "Phone", amount: 32, dueDay: cal.component(.day, from: daysFromNow(4)), category: "Utilities"),
                 RecurringCommitment(name: "Gym", amount: 45, dueDay: cal.component(.day, from: daysFromNow(12)), category: "Health"),
                 RecurringCommitment(name: "Netflix", amount: 11, dueDay: cal.component(.day, from: daysFromNow(6)), category: "Subscriptions"),
+                RecurringCommitment(name: "Electricity", amount: 60, dueDay: max(1, cal.component(.day, from: daysFromNow(-6))), category: "Utilities"),
             ],
             oneOffCosts: [
                 OneOffCost(name: "Concert tickets", amount: 120, date: daysFromNow(5)),
                 OneOffCost(name: "Dentist", amount: 80, date: daysFromNow(14)),
+                OneOffCost(name: "Birthday gift", amount: 40, date: daysFromNow(-3)),
             ]
         )
     }
 
     static var empty: Finances {
-        Finances(balance: 0, income: Income(amount: 0, nextPayDate: Date()))
+        Finances(balance: 0)
     }
 }

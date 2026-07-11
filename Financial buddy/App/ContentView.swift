@@ -10,11 +10,68 @@
 
 import SwiftUI
 
+/// Every modal in the app. Screens *request* a modal via their `present`
+/// callback; ContentView renders it above the tab bar. Presenting at the
+/// root is what guarantees modals sit on top of the bar on the z-axis —
+/// overlays rendered inside a page always draw underneath a safe-area bar.
+enum AppModal: Equatable {
+    case editToday
+    case managePayments
+    case quickAdd
+    case categories(income: Bool)
+    case confirmSignOut
+}
+
+/// The root modal renderer: maps the active `AppModal` to its overlay.
+/// Used by ContentView, and by previews (via `PreviewModalHost`) so
+/// modals are visible in the canvas too.
+struct AppModalLayer: View {
+    @Bindable var store: FinanceBuddyStore
+    @Binding var modal: AppModal?
+    var onSignOut: () async -> Void = {}
+
+    var body: some View {
+        switch modal {
+        case .editToday:
+            EditTodayOverlay(store: store) { modal = nil }
+        case .managePayments:
+            ManageCommitmentsOverlay(store: store) { modal = nil }
+        case .quickAdd:
+            QuickAddOverlay(store: store) { modal = nil }
+        case .categories(let income):
+            ManageCategoriesOverlay(store: store, forIncome: income) { modal = nil }
+        case .confirmSignOut:
+            SignOutConfirmOverlay(onSignOut: onSignOut) { modal = nil }
+        case nil:
+            EmptyView()
+        }
+    }
+}
+
+/// Preview-only harness: hosts a page together with the root modal layer
+/// so tapping the page's edit/add buttons shows the modal in the canvas,
+/// exactly as ContentView composes it at runtime.
+struct PreviewModalHost<Content: View>: View {
+    @State private var modal: AppModal?
+    let store: FinanceBuddyStore
+    @ViewBuilder let content: (_ present: @escaping (AppModal) -> Void) -> Content
+
+    var body: some View {
+        content({ modal = $0 })
+            .overlay { AppModalLayer(store: store, modal: $modal) }
+            .animation(.fbModal, value: modal)
+            .preferredColorScheme(.dark)
+    }
+}
+
 struct ContentView: View {
     @State private var store: FinanceBuddyStore
     @State private var lock = AppLock()
     @State private var tab: Tab = .ask
     @State private var keyboardVisible = false
+    /// The one modal that's up, rendered at the root above the tab bar.
+    @State private var modal: AppModal?
+    @AppStorage("fbAppearance") private var appearanceRaw = FBAppearance.dark.rawValue
     #if canImport(Supabase)
     @State private var auth = SupabaseAuthModel()
     #endif
@@ -44,7 +101,8 @@ struct ContentView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: lock.isUnlocked)
         .task { await lock.authenticate() }
-        .preferredColorScheme(.dark) // dark theme: keep system controls in step
+        // User-chosen appearance; nil (system) follows the device setting.
+        .preferredColorScheme((FBAppearance(rawValue: appearanceRaw) ?? .dark).colorScheme)
     }
 
     /// After the biometric gate: sign-in (Supabase) then the main interface.
@@ -93,16 +151,34 @@ struct ContentView: View {
         // the tab bar pocket — every vertical scroll in the hierarchy.
         .scrollEdgeEffectStyle(.soft, for: .vertical)
         // A real bar (not a VStack sibling): pages scroll under it and the
-        // system fades content into its pocket. It still makes way for the
-        // keyboard so the input sits directly above it.
+        // system fades content into its pocket. It only makes way for the
+        // keyboard — modals don't move it, they simply cover it.
         .safeAreaBar(edge: .bottom) {
             if !keyboardVisible {
                 CustomTabBar(selection: pagedTab)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        // The modal layer sits OUTSIDE the safe-area bar, so it always
+        // draws in front of the tab bar; the backdrop dims the bar along
+        // with the rest of the screen.
+        .overlay { modalLayer }
         .animation(.easeInOut(duration: 0.2), value: keyboardVisible)
+        .animation(.fbModal, value: modal)
         .observeKeyboard(isVisible: $keyboardVisible)
+    }
+
+    private var modalLayer: some View {
+        AppModalLayer(store: store, modal: $modal, onSignOut: performSignOut)
+    }
+
+    private func performSignOut() async {
+        #if canImport(Supabase)
+        await auth.signOut()
+        // Drop the local copy of the signed-out user's data.
+        store.persistence = nil
+        store.finances = .empty
+        #endif
     }
 
     /// Bridges the optional scroll position to the concrete tab selection.
@@ -121,8 +197,10 @@ struct ContentView: View {
     @ViewBuilder
     private func pageView(for page: Tab) -> some View {
         switch page {
-        case .ask:     AskView(store: store, isActive: tab == .ask)
-        case .budget:  BudgetView(store: store)
+        case .ask:     AskView(store: store, isActive: tab == .ask,
+                               present: { modal = $0 })
+        case .budget:  BudgetView(store: store,
+                                  present: { modal = $0 })
         case .profile: profileView
         }
     }
@@ -130,14 +208,11 @@ struct ContentView: View {
     @ViewBuilder
     private var profileView: some View {
         #if canImport(Supabase)
-        ProfileView(email: auth.email) {
-            await auth.signOut()
-            // Drop the local copy of the signed-out user's data.
-            store.persistence = nil
-            store.finances = .empty
-        }
+        ProfileView(store: store, email: auth.email, canSignOut: true,
+                    present: { modal = $0 })
         #else
-        ProfileView(email: nil, onSignOut: nil)
+        ProfileView(store: store, email: nil, canSignOut: false,
+                    present: { modal = $0 })
         #endif
     }
 }
@@ -198,6 +273,7 @@ enum Tab: CaseIterable {
 struct CustomTabBar: View {
     @Binding var selection: Tab?
     @Namespace private var pill
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         HStack(spacing: 6) {
@@ -214,11 +290,8 @@ struct CustomTabBar: View {
                         .background {
                             if selection == tab {
                                 Capsule()
-                                    .fill(Color.white.opacity(0.10))
-                                    .overlay(
-                                        Capsule().strokeBorder(Color.white.opacity(0.10),
-                                                               lineWidth: 1)
-                                    )
+                                    .fill(Color.fbInk.opacity(0.10))
+                                    
                                     .matchedGeometryEffect(id: "activePill", in: pill)
                             }
                         }
@@ -230,20 +303,27 @@ struct CustomTabBar: View {
         .padding(5)
         .background {
             Capsule().fill(.ultraThinMaterial)
+            // The deepening tint reads right in dark; light mode gets a
+            // frosted white lift instead so the bar doesn't turn muddy.
             Capsule().fill(
-                LinearGradient(colors: [Color.white.opacity(0.06), .clear],
-                               startPoint: .top, endPoint: .bottom)
+                scheme == .dark
+                    ? LinearGradient(colors: [Color.black.opacity(0.2),
+                                              Color.black.opacity(0.6)],
+                                     startPoint: .top, endPoint: .bottom)
+                    : LinearGradient(colors: [Color.white.opacity(0.7),
+                                              Color.white.opacity(0.35)],
+                                     startPoint: .top, endPoint: .bottom)
             )
         }
         .overlay(
             Capsule().strokeBorder(
-                LinearGradient(colors: [Color.white.opacity(0.16),
-                                        Color.white.opacity(0.04)],
+                LinearGradient(colors: [Color.fbInk.opacity(0.16),
+                                        Color.fbInk.opacity(0.04)],
                                startPoint: .top, endPoint: .bottom),
-                lineWidth: 1
+                lineWidth: 0.5
             )
         )
-        .shadow(color: .black.opacity(0.45), radius: 18, y: 6)
+        .shadow(color: .black.opacity(scheme == .dark ? 0.25 : 0.10), radius: 18, y: 6)
         .padding(.top, 8)
         .padding(.bottom, 4)
         .frame(maxWidth: .infinity)
@@ -259,6 +339,7 @@ struct CustomTabBar: View {
     // is visible composed with a screen.
     struct ShellPreview: View {
         @State private var tab: Tab? = .ask
+        @State private var modal: AppModal?
         let store = FinanceBuddyStore(finances: .sample)
         var body: some View {
             ScrollView(.horizontal) {
@@ -266,9 +347,10 @@ struct CustomTabBar: View {
                     ForEach(Tab.allCases, id: \.self) { page in
                         Group {
                             switch page {
-                            case .ask:     AskView(store: store)
-                            case .budget:  BudgetView(store: store)
-                            case .profile: ProfileView(email: "preview@example.com", onSignOut: {})
+                            case .ask:     AskView(store: store, present: { modal = $0 })
+                            case .budget:  BudgetView(store: store, present: { modal = $0 })
+                            case .profile: ProfileView(store: store, email: "preview@example.com",
+                                                       canSignOut: true, present: { modal = $0 })
                             }
                         }
                         .containerRelativeFrame(.horizontal)
@@ -283,6 +365,8 @@ struct CustomTabBar: View {
             .safeAreaBar(edge: .bottom) {
                 CustomTabBar(selection: $tab)
             }
+            .overlay { AppModalLayer(store: store, modal: $modal) }
+            .animation(.fbModal, value: modal)
             .background(Color.fbBackground)
             .preferredColorScheme(.dark)
         }

@@ -146,38 +146,74 @@ struct SupabaseFinancePersistence: FinancePersisting {
     func load() async throws -> Finances? {
         async let core: [FinancesRow] = client
             .from("finances").select().eq("user_id", value: userId).execute().value
+        async let incomes: [IncomeSourceRow] = client
+            .from("income_sources").select().eq("user_id", value: userId).execute().value
         async let commitments: [CommitmentRow] = client
             .from("recurring_commitments").select().eq("user_id", value: userId).execute().value
         async let oneOffs: [OneOffRow] = client
             .from("one_off_costs").select().eq("user_id", value: userId).execute().value
 
-        let (coreRows, commitmentRows, oneOffRows) = try await (core, commitments, oneOffs)
+        let (coreRows, incomeRows, commitmentRows, oneOffRows) =
+            try await (core, incomes, commitments, oneOffs)
         guard let c = coreRows.first else { return nil } // nothing saved yet
+
+        var sources = incomeRows.map {
+            IncomeSource(id: $0.id, name: $0.name, amount: $0.amount,
+                         isRecurring: $0.is_recurring ?? true,
+                         category: $0.category ?? "General",
+                         date: $0.date ?? c.next_pay_date)
+        }
+        // Migration: accounts saved before multi-income only have the old
+        // single income_amount — surface it as a "Salary" source anchored
+        // on the stored payday.
+        if sources.isEmpty && c.income_amount > 0 {
+            sources = [IncomeSource(name: "Salary", amount: c.income_amount,
+                                    isRecurring: true, category: "Salary",
+                                    date: c.next_pay_date)]
+        }
 
         return Finances(
             balance: c.balance,
-            income: Income(amount: c.income_amount, nextPayDate: c.next_pay_date),
+            incomeSources: sources,
             recurringCommitments: commitmentRows.map {
                 RecurringCommitment(id: $0.id, name: $0.name, amount: $0.amount,
                                     dueDay: $0.due_day, category: $0.category)
             },
             oneOffCosts: oneOffRows.map {
                 OneOffCost(id: $0.id, name: $0.name, amount: $0.amount, date: $0.date)
-            }
+            },
+            paymentCategories: c.payment_categories ?? Finances.defaultPaymentCategories,
+            incomeCategories: c.income_categories ?? Finances.defaultIncomeCategories
         )
     }
 
     func save(_ finances: Finances) async throws {
-        // 1. Upsert the single core row.
+        // 1. Upsert the single core row (income_amount kept as the total
+        //    for backwards compatibility).
         try await client.from("finances").upsert(
             FinancesRow(user_id: userId,
                         balance: finances.balance,
-                        income_amount: finances.income.amount,
-                        next_pay_date: finances.income.nextPayDate),
+                        income_amount: finances.totalIncome,
+                        // Payday is now derived from recurring income; the
+                        // column stays populated for backwards compatibility.
+                        next_pay_date: finances.nextPayday(),
+                        payment_categories: finances.paymentCategories,
+                        income_categories: finances.incomeCategories),
             onConflict: "user_id"
         ).execute()
 
         // 2. Replace child rows for this user.
+        try await client.from("income_sources").delete().eq("user_id", value: userId).execute()
+        if !finances.incomeSources.isEmpty {
+            try await client.from("income_sources").insert(
+                finances.incomeSources.map {
+                    IncomeSourceRow(id: $0.id, user_id: userId, name: $0.name,
+                                    amount: $0.amount, is_recurring: $0.isRecurring,
+                                    category: $0.category, date: $0.date)
+                }
+            ).execute()
+        }
+
         try await client.from("recurring_commitments").delete().eq("user_id", value: userId).execute()
         if !finances.recurringCommitments.isEmpty {
             try await client.from("recurring_commitments").insert(
@@ -207,6 +243,21 @@ private struct FinancesRow: Codable {
     var balance: Double
     var income_amount: Double
     var next_pay_date: Date
+    // Optional so rows written before the categories migration still decode.
+    var payment_categories: [String]?
+    var income_categories: [String]?
+}
+
+private struct IncomeSourceRow: Codable {
+    var id: UUID
+    var user_id: UUID
+    var name: String
+    var amount: Double
+    // Optional so rows written before the recurring/category/date
+    // migrations decode.
+    var is_recurring: Bool?
+    var category: String?
+    var date: Date?
 }
 
 private struct CommitmentRow: Codable {
@@ -230,8 +281,10 @@ private struct OneOffRow: Codable {
 
 /*
  ── Supabase SQL schema ───────────────────────────────────────────────────
- Run this in the Supabase SQL editor. RLS ensures each user only ever sees
- their own rows.
+ Run this in the Supabase SQL editor. The whole block is idempotent —
+ safe to re-run on an existing project (tables are `if not exists`,
+ columns are added `if not exists`, policies are dropped and recreated).
+ RLS ensures each user only ever sees their own rows.
 
  create table if not exists finances (
    user_id uuid primary key references auth.users on delete cascade,
@@ -239,6 +292,23 @@ private struct OneOffRow: Codable {
    income_amount numeric not null default 0,
    next_pay_date timestamptz not null default now()
  );
+ -- 2026-07-11: user-editable category lists.
+ alter table finances add column if not exists payment_categories jsonb;
+ alter table finances add column if not exists income_categories jsonb;
+
+ -- 2026-07-11: multiple income sources, split recurring/one-off + category.
+ create table if not exists income_sources (
+   id uuid primary key default gen_random_uuid(),
+   user_id uuid not null references auth.users on delete cascade,
+   name text not null,
+   amount numeric not null,
+   is_recurring boolean not null default true,
+   category text not null default 'General',
+   date timestamptz not null default now()
+ );
+ alter table income_sources add column if not exists is_recurring boolean not null default true;
+ alter table income_sources add column if not exists category text not null default 'General';
+ alter table income_sources add column if not exists date timestamptz not null default now();
 
  create table if not exists recurring_commitments (
    id uuid primary key default gen_random_uuid(),
@@ -258,14 +328,22 @@ private struct OneOffRow: Codable {
  );
 
  alter table finances               enable row level security;
+ alter table income_sources        enable row level security;
  alter table recurring_commitments  enable row level security;
  alter table one_off_costs          enable row level security;
 
- create policy "own finances"    on finances
+ drop policy if exists "own finances"       on finances;
+ drop policy if exists "own income_sources" on income_sources;
+ drop policy if exists "own commitments"    on recurring_commitments;
+ drop policy if exists "own one_offs"       on one_off_costs;
+
+ create policy "own finances"       on finances
    for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
- create policy "own commitments" on recurring_commitments
+ create policy "own income_sources" on income_sources
    for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
- create policy "own one_offs"    on one_off_costs
+ create policy "own commitments"    on recurring_commitments
+   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+ create policy "own one_offs"       on one_off_costs
    for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
  ──────────────────────────────────────────────────────────────────────────
 */

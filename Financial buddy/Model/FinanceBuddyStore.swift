@@ -60,6 +60,73 @@ final class FinanceBuddyStore {
         }
     }
 
+    func addIncome(_ s: IncomeSource) {
+        finances.incomeSources.append(s)
+    }
+
+    func removeIncome(_ s: IncomeSource) {
+        finances.incomeSources.removeAll { $0.id == s.id }
+    }
+
+    func updateIncome(_ s: IncomeSource) {
+        if let index = finances.incomeSources.firstIndex(where: { $0.id == s.id }) {
+            finances.incomeSources[index] = s
+        }
+    }
+
+    // MARK: Categories (managed from Profile)
+
+    func addCategory(_ name: String, forIncome: Bool) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        if forIncome {
+            guard !finances.incomeCategories.contains(trimmed) else { return }
+            finances.incomeCategories.append(trimmed)
+        } else {
+            guard !finances.paymentCategories.contains(trimmed) else { return }
+            finances.paymentCategories.append(trimmed)
+        }
+    }
+
+    /// Renames a category and re-tags every item that used the old name.
+    func renameCategory(from old: String, to new: String, forIncome: Bool) {
+        let trimmed = new.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed != old else { return }
+        if forIncome {
+            guard let index = finances.incomeCategories.firstIndex(of: old) else { return }
+            finances.incomeCategories[index] = trimmed
+            for i in finances.incomeSources.indices where finances.incomeSources[i].category == old {
+                finances.incomeSources[i].category = trimmed
+            }
+        } else {
+            guard let index = finances.paymentCategories.firstIndex(of: old) else { return }
+            finances.paymentCategories[index] = trimmed
+            for i in finances.recurringCommitments.indices where finances.recurringCommitments[i].category == old {
+                finances.recurringCommitments[i].category = trimmed
+            }
+        }
+    }
+
+    /// Removes a category; items that used it fall back to the first
+    /// remaining category. The last category can't be removed.
+    func removeCategory(_ name: String, forIncome: Bool) {
+        if forIncome {
+            guard finances.incomeCategories.count > 1 else { return }
+            finances.incomeCategories.removeAll { $0 == name }
+            let fallback = finances.incomeCategories[0]
+            for i in finances.incomeSources.indices where finances.incomeSources[i].category == name {
+                finances.incomeSources[i].category = fallback
+            }
+        } else {
+            guard finances.paymentCategories.count > 1 else { return }
+            finances.paymentCategories.removeAll { $0 == name }
+            let fallback = finances.paymentCategories[0]
+            for i in finances.recurringCommitments.indices where finances.recurringCommitments[i].category == name {
+                finances.recurringCommitments[i].category = fallback
+            }
+        }
+    }
+
     // MARK: Loading & saving
 
     func load() async {

@@ -2,61 +2,204 @@
 //  BudgetEditOverlays.swift
 //  Finance buddy
 //
-//  The two edit "sheets" for the Budget tab, built as custom ZStack
-//  overlays (never .sheet()):
-//  - EditTodayOverlay: balance, income amount, next payday
-//  - ManageCommitmentsOverlay: add / edit / delete recurring commitments
-//    and one-off costs behind a segmented toggle
+//  The Budget tab's edit modals, built as custom ZStack overlays (never
+//  .sheet()). Cards stack on the z-axis:
+//  - EditTodayOverlay: balance & payday, with the income manager (list →
+//    add/edit form) stacking on top.
+//  - ManageCommitmentsOverlay: recurring + one-off payments behind a
+//    segmented toggle; the add/edit form stacks on top of the list.
+//
+//  Drafts are non-optional state behind a `showForm` flag — an optional
+//  draft unwrapped with Binding($draft) traps when the form is dismissed
+//  mid-transition.
 //
 
 import SwiftUI
 
-// MARK: - Edit balance / income / payday
+// MARK: - Edit balance / payday (+ stacked income manager)
 
 struct EditTodayOverlay: View {
     @Bindable var store: FinanceBuddyStore
     let onClose: () -> Void
 
     @State private var balance: Double
-    @State private var incomeAmount: Double
-    @State private var payday: Date
+
+    // The stacked income layers.
+    @State private var showIncome = false
+    @State private var showIncomeForm = false
+    @State private var incomeDraft = IncomeDraft()
 
     init(store: FinanceBuddyStore, onClose: @escaping () -> Void) {
         self.store = store
         self.onClose = onClose
         _balance = State(initialValue: store.finances.balance)
-        _incomeAmount = State(initialValue: store.finances.income.amount)
-        _payday = State(initialValue: store.finances.income.nextPayDate)
     }
 
     var body: some View {
-        ModalOverlay(title: "Edit your numbers",
-                     canSave: true,
-                     saveLabel: "Save",
-                     onCancel: onClose,
-                     onSave: save) {
-            VStack(alignment: .leading, spacing: 16) {
-                LabeledField(label: "Current balance") {
-                    CurrencyField(value: $balance)
-                }
-                LabeledField(label: "Income per pay") {
-                    CurrencyField(value: $incomeAmount)
-                }
-                LabeledField(label: "Next payday") {
-                    DatePicker("", selection: $payday, displayedComponents: .date)
-                        .labelsHidden()
-                        .datePickerStyle(.compact)
-                        .tint(Color.fbPositive)
-                }
+        ZStack {
+            ModalBackdrop(onTap: backdropTapped)
+
+            ModalCard(depth: mainDepth) { mainForm }
+
+            if showIncome {
+                ModalCard(depth: showIncomeForm ? 1 : 0) { incomeList }
+                    .transition(.fbModalPush)
+                    .zIndex(1)
             }
+
+            if showIncomeForm {
+                ModalCard { incomeForm }
+                    .transition(.fbModalPush)
+                    .zIndex(2)
+            }
+        }
+        .transition(.opacity)
+        .animation(.fbModal, value: showIncome)
+        .animation(.fbModal, value: showIncomeForm)
+    }
+
+    private var mainDepth: Int {
+        guard showIncome else { return 0 }
+        return showIncomeForm ? 2 : 1
+    }
+
+    /// Backdrop taps dismiss only the frontmost layer.
+    private func backdropTapped() {
+        if showIncomeForm { showIncomeForm = false }
+        else if showIncome { showIncome = false }
+        else { onClose() }
+    }
+
+    // MARK: Layer 0 — balance & payday
+
+    private var mainForm: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Edit your numbers")
+                .font(.fbHeader(20))
+                .tracking(-0.3)
+                .foregroundStyle(Color.fbInk)
+
+            LabeledField(label: "Current balance") {
+                CurrencyField(value: $balance)
+            }
+
+            // Payday is derived from recurring income dates, so income is
+            // the only other thing to manage — one card up the stack.
+            Button {
+                showIncome = true
+            } label: {
+                HStack(spacing: 10) {
+                    Text("Income sources")
+                        .font(.fbBody(15, weight: .medium))
+                        .foregroundStyle(Color.fbInk)
+                    Spacer()
+                    Text(Money.string(store.finances.totalIncome))
+                        .font(.fbNumber(14, weight: .medium))
+                        .foregroundStyle(Color.fbSoftText)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color.fbSoftText)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.fbBackground)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.fbHairline, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.pressable)
+
+            ModalActionButtons(primaryLabel: "Save",
+                               onPrimary: save,
+                               onSecondary: onClose)
         }
     }
 
     private func save() {
         store.finances.balance = balance
-        store.finances.income.amount = incomeAmount
-        store.finances.income.nextPayDate = payday
         onClose()
+    }
+
+    // MARK: Layer 1 — income list (same shape as the payments modal)
+
+    private var incomeList: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Income")
+                .font(.fbHeader(20))
+                .tracking(-0.3)
+                .foregroundStyle(Color.fbInk)
+
+            ScrollView {
+                VStack(spacing: 2) {
+                    if store.finances.incomeSources.isEmpty {
+                        ModalEmptyHint(text: "No income yet.")
+                    }
+                    ForEach(store.finances.incomeSources) { source in
+                        ModalItemRow(name: source.name,
+                                     detail: source.isRecurring
+                                         ? "Monthly · \(source.category)"
+                                         : "\(source.date.formatted(.dateTime.day().month(.abbreviated))) · \(source.category)",
+                                     amount: source.amount,
+                                     onEdit: {
+                                         incomeDraft = IncomeDraft(id: source.id,
+                                                                   name: source.name,
+                                                                   amount: source.amount,
+                                                                   isRecurring: source.isRecurring,
+                                                                   category: source.category,
+                                                                   date: source.date)
+                                         showIncomeForm = true
+                                     },
+                                     onDelete: { store.removeIncome(source) })
+                    }
+                }
+            }
+            .frame(maxHeight: 240)
+
+            VStack(spacing: 10) {
+                FBPrimaryButton(label: "Add") {
+                    var draft = IncomeDraft()
+                    draft.category = store.finances.incomeCategories.first ?? "General"
+                    incomeDraft = draft
+                    showIncomeForm = true
+                }
+                FBSecondaryButton(label: "Done") { showIncome = false }
+            }
+        }
+    }
+
+    // MARK: Layer 2 — income add/edit form
+
+    private var incomeForm: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(incomeDraft.id == nil ? "New income" : "Edit income")
+                .font(.fbHeader(20))
+                .tracking(-0.3)
+                .foregroundStyle(Color.fbInk)
+
+            IncomeFormFields(draft: $incomeDraft,
+                             categories: store.finances.incomeCategories)
+
+            ModalActionButtons(primaryLabel: "Save",
+                               primaryEnabled: incomeDraft.isValid,
+                               onPrimary: saveIncomeDraft,
+                               onSecondary: { showIncomeForm = false })
+        }
+    }
+
+    private func saveIncomeDraft() {
+        guard let amount = incomeDraft.amount else { return }
+        let source = IncomeSource(id: incomeDraft.id ?? UUID(),
+                                  name: incomeDraft.name.trimmingCharacters(in: .whitespaces),
+                                  amount: amount,
+                                  isRecurring: incomeDraft.isRecurring,
+                                  category: incomeDraft.category,
+                                  date: incomeDraft.date)
+        incomeDraft.id == nil ? store.addIncome(source) : store.updateIncome(source)
+        showIncomeForm = false
     }
 }
 
@@ -66,316 +209,120 @@ struct ManageCommitmentsOverlay: View {
     @Bindable var store: FinanceBuddyStore
     let onClose: () -> Void
 
-    enum Segment: String, CaseIterable {
-        case recurring = "Recurring"
-        case oneOff = "One-off"
-    }
-
-    /// Form state for adding or editing a single item. `id == nil` means
-    /// a brand-new item.
-    private struct Draft {
-        var id: UUID?
-        var name = ""
-        var amount: Double?
-        var dueDay = 1
-        var category = "General"
-        var date = Date()
-        var isRecurring: Bool
-    }
-
-    @State private var segment: Segment = .recurring
-    @State private var draft: Draft?
-
-    private let categories = ["General", "Housing", "Utilities", "Subscriptions",
-                              "Health", "Transport", "Insurance", "Debt"]
+    @State private var showForm = false
+    @State private var draft = PaymentDraft()
 
     var body: some View {
         ZStack {
-            // Progressive glass dim: blur what's behind, then darken.
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .ignoresSafeArea()
-                .overlay(Color.black.opacity(0.35).ignoresSafeArea())
-                .onTapGesture { if draft == nil { onClose() } }
+            ModalBackdrop {
+                if showForm { showForm = false } else { onClose() }
+            }
 
-            VStack(spacing: 0) {
-                Spacer(minLength: 60)
-                Card(cornerRadius: 22) {
-                    VStack(alignment: .leading, spacing: 16) {
-                        header
+            ModalCard(depth: showForm ? 1 : 0) { list }
 
-                        if draft == nil {
-                            segmentToggle
-                            itemList
-                            addButton  // same position & style for both segments
-                            doneButton // below Add
-                        } else {
-                            form
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+            if showForm {
+                ModalCard { form }
+                    .transition(.fbModalPush)
+                    .zIndex(1)
             }
         }
         .transition(.opacity)
+        .animation(.fbModal, value: showForm)
     }
 
-    // MARK: Pieces
+    // MARK: List layer
 
-    private var header: some View {
-        Text(draft == nil ? "Upcoming payments"
-                          : (draft?.id == nil ? "New payment" : "Edit payment"))
-            .font(.fbHeader(20))
-            .tracking(-0.3)
-            .foregroundStyle(Color.fbInk)
-    }
+    private var list: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Upcoming payments")
+                .font(.fbHeader(20))
+                .tracking(-0.3)
+                .foregroundStyle(Color.fbInk)
 
-    private var segmentToggle: some View {
-        HStack(spacing: 4) {
-            ForEach(Segment.allCases, id: \.self) { s in
-                Button {
-                    withAnimation(.easeInOut(duration: 0.15)) { segment = s }
-                } label: {
-                    Text(s.rawValue)
-                        .font(.fbBody(14, weight: .semibold))
-                        .foregroundStyle(segment == s ? Color.fbInk : Color.fbSoftText)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .fill(segment == s ? Color.fbBackground : .clear)
-                        )
-                }
-                .buttonStyle(.pressable)
-            }
-        }
-        .padding(4)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.fbBackground.opacity(0.6))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.fbHairline, lineWidth: 1)
-        )
-    }
-
-    private var itemList: some View {
-        ScrollView {
-            VStack(spacing: 2) {
-                switch segment {
-                case .recurring:
-                    if store.finances.recurringCommitments.isEmpty {
-                        emptyHint("No recurring commitments yet.")
+            ScrollView {
+                VStack(spacing: 2) {
+                    if store.finances.recurringCommitments.isEmpty
+                        && store.finances.oneOffCosts.isEmpty {
+                        ModalEmptyHint(text: "No payments yet.")
                     }
                     ForEach(store.finances.recurringCommitments) { c in
-                        itemRow(name: c.name,
-                                detail: "Day \(c.dueDay) · \(c.category)",
-                                amount: c.amount,
-                                onEdit: {
-                                    draft = Draft(id: c.id, name: c.name, amount: c.amount,
-                                                  dueDay: c.dueDay, category: c.category,
-                                                  isRecurring: true)
-                                },
-                                onDelete: { store.removeCommitment(c) })
-                    }
-                case .oneOff:
-                    if store.finances.oneOffCosts.isEmpty {
-                        emptyHint("No one-off costs yet.")
+                        ModalItemRow(name: c.name,
+                                     detail: "Monthly · \(c.category)",
+                                     amount: c.amount,
+                                     onEdit: {
+                                         draft = PaymentDraft(
+                                             id: c.id, name: c.name,
+                                             amount: c.amount,
+                                             isRecurring: true,
+                                             category: c.category,
+                                             date: Finances.nextOccurrence(ofDueDay: c.dueDay,
+                                                                           onOrAfter: Date(),
+                                                                           calendar: .current))
+                                         showForm = true
+                                     },
+                                     onDelete: { store.removeCommitment(c) })
                     }
                     ForEach(store.finances.oneOffCosts) { o in
-                        itemRow(name: o.name,
-                                detail: o.date.formatted(date: .abbreviated, time: .omitted),
-                                amount: o.amount,
-                                onEdit: {
-                                    draft = Draft(id: o.id, name: o.name, amount: o.amount,
-                                                  date: o.date, isRecurring: false)
-                                },
-                                onDelete: { store.removeOneOff(o) })
+                        ModalItemRow(name: o.name,
+                                     detail: o.date.formatted(date: .abbreviated, time: .omitted),
+                                     amount: o.amount,
+                                     onEdit: {
+                                         draft = PaymentDraft(id: o.id, name: o.name,
+                                                              amount: o.amount,
+                                                              isRecurring: false,
+                                                              date: o.date)
+                                         showForm = true
+                                     },
+                                     onDelete: { store.removeOneOff(o) })
                     }
                 }
             }
-        }
-        .frame(maxHeight: 260)
-    }
+            .frame(maxHeight: 260)
 
-    private func emptyHint(_ text: String) -> some View {
-        Text(text)
-            .font(.fbBody(14))
-            .foregroundStyle(Color.fbSoftText)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 10)
-    }
-
-    private func itemRow(name: String, detail: String, amount: Double,
-                         onEdit: @escaping () -> Void,
-                         onDelete: @escaping () -> Void) -> some View {
-        HStack(spacing: 12) {
-            Button(action: onEdit) {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(name)
-                            .font(.fbBody(16, weight: .medium))
-                            .foregroundStyle(Color.fbInk)
-                        Text(detail)
-                            .font(.fbBody(13))
-                            .foregroundStyle(Color.fbSoftText)
-                    }
-                    Spacer()
-                    Text(Money.string(amount))
-                        .font(.fbNumber(15, weight: .medium))
-                        .foregroundStyle(Color.fbInk)
+            VStack(spacing: 10) {
+                FBPrimaryButton(label: "Add") {
+                    var new = PaymentDraft()
+                    new.category = store.finances.paymentCategories.first ?? "General"
+                    draft = new
+                    showForm = true
                 }
-                .contentShape(Rectangle())
+                FBSecondaryButton(label: "Done", action: onClose)
             }
-            .buttonStyle(.pressable)
-
-            Button(action: onDelete) {
-                Image(systemName: "minus.circle.fill")
-                    .font(.system(size: 20))
-                    .foregroundStyle(Color.fbWarning.opacity(0.85))
-            }
-            .buttonStyle(.pressable)
         }
-        .padding(.vertical, 7)
     }
 
-    /// Full-width add button — identical placement and style whichever
-    /// segment is showing.
-    private var addButton: some View {
-        Button {
-            draft = Draft(isRecurring: segment == .recurring)
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .bold))
-                Text("Add")
-                    .font(.fbBody(15, weight: .semibold))
-            }
-            .foregroundStyle(Color.fbOnAccent)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 13)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.fbPositive)
-            )
-        }
-        .buttonStyle(.pressable)
-    }
+    // MARK: Form layer (stacked on top)
 
-    /// Sits below Add: quiet, borderless, closes the overlay.
-    private var doneButton: some View {
-        Button(action: onClose) {
-            Text("Done")
-                .font(.fbBody(15, weight: .semibold))
-                .foregroundStyle(Color.fbSoftText)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.white.opacity(0.05))
-                )
-        }
-        .buttonStyle(.pressable)
-    }
-
-    // MARK: Add / edit form
-
-    @ViewBuilder
     private var form: some View {
-        if let current = draft {
-            VStack(alignment: .leading, spacing: 16) {
-                LabeledField(label: "Name") {
-                    PlainTextField(placeholder: current.isRecurring ? "e.g. Rent" : "e.g. Flights",
-                                   text: Binding(get: { draft?.name ?? "" },
-                                                 set: { draft?.name = $0 }))
-                }
-                LabeledField(label: "Amount") {
-                    CurrencyEntryField(value: Binding(get: { draft?.amount },
-                                                      set: { draft?.amount = $0 }))
-                }
+        VStack(alignment: .leading, spacing: 18) {
+            Text(draft.id == nil ? "New payment" : "Edit payment")
+                .font(.fbHeader(20))
+                .tracking(-0.3)
+                .foregroundStyle(Color.fbInk)
 
-                if current.isRecurring {
-                    LabeledField(label: "Due day of month") {
-                        Picker("", selection: Binding(get: { draft?.dueDay ?? 1 },
-                                                      set: { draft?.dueDay = $0 })) {
-                            ForEach(1...31, id: \.self) { Text("Day \($0)").tag($0) }
-                        }
-                        .pickerStyle(.menu)
-                        .tint(Color.fbInk)
-                    }
-                    LabeledField(label: "Category") {
-                        Picker("", selection: Binding(get: { draft?.category ?? "General" },
-                                                      set: { draft?.category = $0 })) {
-                            ForEach(categories, id: \.self) { Text($0).tag($0) }
-                        }
-                        .pickerStyle(.menu)
-                        .tint(Color.fbInk)
-                    }
-                } else {
-                    LabeledField(label: "Date") {
-                        DatePicker("", selection: Binding(get: { draft?.date ?? Date() },
-                                                          set: { draft?.date = $0 }),
-                                   displayedComponents: .date)
-                            .labelsHidden()
-                            .datePickerStyle(.compact)
-                            .tint(Color.fbPositive)
-                    }
-                }
+            PaymentFormFields(draft: $draft,
+                              categories: store.finances.paymentCategories)
 
-                HStack(spacing: 12) {
-                    Button {
-                        draft = nil
-                    } label: {
-                        Text("Cancel")
-                            .font(.fbBody(16, weight: .semibold))
-                            .foregroundStyle(Color.fbSoftText)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(Color.fbBackground)
-                            )
-                    }
-                    .buttonStyle(.pressable)
-
-                    Button(action: saveDraft) {
-                        Text("Save")
-                            .font(.fbBody(16, weight: .semibold))
-                            .foregroundStyle(Color.fbOnAccent)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(canSaveDraft ? Color.fbPositive : Color.fbHairline)
-                            )
-                    }
-                    .buttonStyle(.pressable)
-                    .disabled(!canSaveDraft)
-                }
-            }
+            ModalActionButtons(primaryLabel: "Save",
+                               primaryEnabled: draft.isValid,
+                               onPrimary: saveDraft,
+                               onSecondary: { showForm = false })
         }
-    }
-
-    private var canSaveDraft: Bool {
-        guard let draft else { return false }
-        return !draft.name.trimmingCharacters(in: .whitespaces).isEmpty && (draft.amount ?? 0) > 0
     }
 
     private func saveDraft() {
-        guard let d = draft, let amount = d.amount else { return }
-        let name = d.name.trimmingCharacters(in: .whitespaces)
+        guard let amount = draft.amount else { return }
+        let name = draft.name.trimmingCharacters(in: .whitespaces)
 
-        if d.isRecurring {
-            let item = RecurringCommitment(id: d.id ?? UUID(), name: name, amount: amount,
-                                           dueDay: d.dueDay, category: d.category)
-            d.id == nil ? store.addCommitment(item) : store.updateCommitment(item)
+        if draft.isRecurring {
+            let item = RecurringCommitment(id: draft.id ?? UUID(), name: name, amount: amount,
+                                           dueDay: draft.dueDay, category: draft.category)
+            draft.id == nil ? store.addCommitment(item) : store.updateCommitment(item)
         } else {
-            let item = OneOffCost(id: d.id ?? UUID(), name: name, amount: amount, date: d.date)
-            d.id == nil ? store.addOneOff(item) : store.updateOneOff(item)
+            let item = OneOffCost(id: draft.id ?? UUID(), name: name, amount: amount, date: draft.date)
+            draft.id == nil ? store.addOneOff(item) : store.updateOneOff(item)
         }
-        draft = nil
+        showForm = false
     }
 }
 
@@ -383,6 +330,14 @@ struct ManageCommitmentsOverlay: View {
     ZStack {
         FBBackground()
         ManageCommitmentsOverlay(store: FinanceBuddyStore(finances: .sample), onClose: {})
+    }
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Edit today") {
+    ZStack {
+        FBBackground()
+        EditTodayOverlay(store: FinanceBuddyStore(finances: .sample), onClose: {})
     }
     .preferredColorScheme(.dark)
 }
