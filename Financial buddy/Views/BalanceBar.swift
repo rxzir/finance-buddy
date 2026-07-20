@@ -93,7 +93,8 @@ struct BalanceBar: View {
             }
         }
         .frame(height: barHeight)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        // No outer clip: its larger corner radius cropped the selection
+        // stroke and glow on the outermost segments.
     }
 
     /// Shared per-segment treatment: tap to select, fade when something

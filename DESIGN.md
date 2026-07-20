@@ -73,11 +73,42 @@ Never `.sheet()`, `.alert()` or system chrome. A modal is:
 
 ## Forms
 
-- `LabeledField` + `PlainTextField` / `CurrencyField` / `CurrencyEntryField`.
-- Recurring vs one-off is a **switch** (`FBToggleRow(label: "Recurring")`)
-  inside the form — never tabs/segments, and never a day-number picker:
-  recurring items pick a date with `FBDateField` and repeat monthly on
-  that day.
+- Fields are **filled floating-label wells** (`FBFieldShell`): a soft
+  rounded fill whose label doubles as the placeholder, floating into a
+  tiny caption when focused or populated. Fixed height — the float is
+  the only motion. Components: `PlainTextField`, `CurrencyField` /
+  `CurrencyEntryField`, `FBDateField`, `FBMenuField` (dropdown with
+  chevron). `LabeledField` survives only for the sign-in screen.
+- Modals close from the **X in `ModalHeader`** — no Cancel button; the
+  footer is a single `FBPrimaryButton`.
+- Amount fields edit the **raw expression** (`12+5×2`, no spaces; value
+  tracks the live result, `=`/blur settles it); ops are five bare glyphs
+  spread across the keyboard bar by spacers, sitting directly on the
+  glass — and they're **hidden while the field is empty** (an op can't
+  start an expression).
+- The Recurring switch sits in the same **filled well** as every other
+  field (`FBToggleField`).
+- The date field's calendar opens as **its own modal card**
+  (transparent `fullScreenCover` hosting `ModalBackdrop` + `ModalCard`)
+  — never inline, never an anchored popover.
+- Modal lists are `List`s: **swipe left to delete** (no minus buttons);
+  categories also **drag to reorder** via `onMove`.
+- Scroll edges use only the native `scrollEdgeEffectStyle(.soft)`. iOS
+  renders edge effects **only for the outermost scroll view** — a page's
+  `ScrollView` nested in the horizontal pager never gets a pocket, no
+  matter where its bars are attached (verified: also broken inside
+  `TabView(.page)` and nested `UIHostingController`s). So the **pager owns
+  both bars**: the tab bar via `safeAreaBar(edge: .bottom)` and the title
+  bar via `safeAreaBar(edge: .top)`, whose content swaps with the selected
+  tab (`PageTitleBar` for Budget/Profile, `AskHeaderBar` for Ask).
+- Recurring vs one-off is a **switch** (`FBToggleRow`, styled by the
+  custom `FBSwitchStyle` — never the native toggle), always the **last
+  row** of the form, plain with no container. Recurring items pick a date
+  with `FBDateField` and repeat monthly on that day.
+- **No reflowing UI**: no helper captions that appear/disappear, no
+  fields that swap with the toggle — toggling or tapping must never make
+  the layout jump. Swappable info shares one fixed slot (e.g. the bar's
+  income/selection row).
 - Amount fields carry calculator ops (+ − × ÷ =) on the keyboard itself
   (`amountKeyboardOps`) — never as chrome in the form UI.
 - There is no standalone "payday" input: payday is derived from recurring

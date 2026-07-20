@@ -18,6 +18,10 @@ struct ChatMessage: Identifiable, Equatable {
     let id = UUID()
     let role: Role
     var text: String
+    /// Staged writes this message asked the user to confirm. The inline
+    /// Confirm/Cancel buttons render only while these are still the
+    /// pending set — resolving or re-proposing hides them.
+    var proposedActions: [ProposedAction] = []
 }
 
 @MainActor
@@ -25,10 +29,17 @@ struct ChatMessage: Identifiable, Equatable {
 final class ChatViewModel {
     var messages: [ChatMessage] = []
     var isThinking = false
+    /// Staged writes the assistant proposed, awaiting the user's
+    /// confirmation. Nothing touches the store until they say yes.
+    var pendingActions: [ProposedAction] = []
 
     @ObservationIgnored private let service: AskServing
+    /// Where confirmed actions are applied. Nil in previews: proposals
+    /// still stage, confirming explains it can't save.
+    @ObservationIgnored private weak var store: FinanceBuddyStore?
 
-    init(service: AskServing = AskService()) {
+    init(store: FinanceBuddyStore? = nil, service: AskServing = OnDeviceAskService()) {
+        self.store = store
         self.service = service
     }
 
@@ -37,18 +48,84 @@ final class ChatViewModel {
         guard !question.isEmpty, !isThinking else { return }
 
         messages.append(ChatMessage(role: .user, text: question))
-        isThinking = true
 
+        // Resolving a staged write is deterministic Swift, never a model
+        // turn: a clear yes applies it, a clear no drops it, anything
+        // else falls through to the model with the proposals kept.
+        if !pendingActions.isEmpty {
+            switch ConfirmationRouting.decision(for: question) {
+            case .confirm:
+                resolvePending(applying: true)
+                return
+            case .cancel:
+                resolvePending(applying: false)
+                return
+            case .other:
+                break
+            }
+        }
+
+        isThinking = true
         Task {
-            let reply: String
+            var reply: ChatMessage
             do {
-                reply = try await service.ask(question: question, snapshot: snapshot)
+                let result = try await service.ask(question: question, snapshot: snapshot)
+                reply = ChatMessage(role: .assistant, text: result.text,
+                                    proposedActions: result.proposedActions)
+                if !result.proposedActions.isEmpty {
+                    // Replace, don't stack: a re-proposal supersedes the
+                    // old one instead of double-logging on confirm.
+                    pendingActions = result.proposedActions
+                }
             } catch {
-                reply = "Sorry — \(error.localizedDescription)"
+                reply = ChatMessage(role: .assistant, text: "Sorry — \(error.localizedDescription)")
             }
             isThinking = false
-            messages.append(ChatMessage(role: .assistant, text: reply))
+            messages.append(reply)
         }
+    }
+
+    /// The inline Confirm button — same path as typing "confirm".
+    func confirmPending() {
+        guard !pendingActions.isEmpty, !isThinking else { return }
+        resolvePending(applying: true)
+    }
+
+    /// The inline Cancel button — same path as typing "cancel".
+    func cancelPending() {
+        guard !pendingActions.isEmpty, !isThinking else { return }
+        resolvePending(applying: false)
+    }
+
+    private func resolvePending(applying: Bool) {
+        let actions = pendingActions
+        pendingActions = []
+        let text = applying ? apply(actions) : "Dropped — nothing was saved."
+        messages.append(ChatMessage(role: .assistant, text: text))
+    }
+
+    /// Applies confirmed actions with the same store calls the quick-add
+    /// overlay uses, and reports the new position.
+    private func apply(_ actions: [ProposedAction]) -> String {
+        guard let store else {
+            return "I can't save right now — use the + button instead."
+        }
+        for action in actions {
+            switch action {
+            case .logExpense(let draft):
+                store.addOneOff(OneOffCost(name: draft.name, amount: draft.amount, date: draft.date))
+            case .logIncome(let draft):
+                store.addIncome(IncomeSource(name: draft.name, amount: draft.amount,
+                                             isRecurring: false, category: "General",
+                                             date: draft.date))
+            case .addRecurring(let draft):
+                store.addCommitment(RecurringCommitment(name: draft.name, amount: draft.amount,
+                                                        dueDay: draft.dueDay, category: "General"))
+            }
+        }
+        let saved = actions.map(\.summary).joined(separator: "; ")
+        let safe = store.finances.safeToSpendToday()
+        return "Done — saved: \(saved). Safe to spend is now \(Money.string(safe))."
     }
 }
 
@@ -60,6 +137,11 @@ struct AskView: View {
     var isActive: Bool = true
     /// Asks the root to present a modal (rendered above the tab bar).
     var present: (AppModal) -> Void = { _ in }
+    /// True once the conversation has the floor: the hero number shrinks
+    /// to the top. Collapses on first send and while scrolling; a pull
+    /// past the top of the transcript brings it back. Owned by the root,
+    /// which renders `AskHeaderBar` in the pager's top bar.
+    @Binding var headerCollapsed: Bool
     @State private var model: ChatViewModel
     @State private var draft = ""
     @State private var dictation = DictationController()
@@ -85,31 +167,32 @@ struct AskView: View {
     ]
 
     init(store: FinanceBuddyStore, isActive: Bool = true,
+         headerCollapsed: Binding<Bool> = .constant(false),
          present: @escaping (AppModal) -> Void = { _ in }) {
         self.store = store
         self.isActive = isActive
         self.present = present
-        _model = State(initialValue: ChatViewModel())
+        _headerCollapsed = headerCollapsed
+        _model = State(initialValue: ChatViewModel(store: store))
     }
 
     /// Used by previews to inject a pre-seeded conversation.
     init(store: FinanceBuddyStore, injectedModel: ChatViewModel) {
         self.store = store
+        _headerCollapsed = .constant(true)
         _model = State(initialValue: injectedModel)
     }
 
     var body: some View {
         ZStack {
-            // Tapping anywhere outside the field dismisses the keyboard.
-            Color.fbBackground
+            // Transparent tap catcher — the shared background (and its
+            // blob drift) lives at the root, behind every page.
+            Color.clear
+                .contentShape(Rectangle())
                 .ignoresSafeArea()
                 .onTapGesture { inputFocused = false }
 
-            // A slow drift of blurred blobs so the screen feels alive.
-            BlobBackground()
-
             VStack(spacing: 0) {
-                header
                 if model.messages.isEmpty {
                     emptyBody
                 } else {
@@ -118,49 +201,22 @@ struct AskView: View {
                 inputBar
             }
         }
+        // The hero header (AskHeaderBar) is rendered by the pager's top
+        // safeAreaBar in ContentView — only the outermost scroll view
+        // renders edge effects, so the bar can't live on this page.
         // One place handles keyboard dismissal for both swipe and tab-bar
         // navigation: leaving the tab clears focus.
         .onChange(of: isActive) {
             if !isActive { inputFocused = false }
         }
-    }
-
-    // MARK: Header — THE number, big, first
-
-    private var header: some View {
-        let safe = store.finances.safeToSpendToday()
-        let days = store.finances.daysUntilPayday()
-        let isOverspent = safe < 0
-
-        let subtitle: String
-        if isOverspent {
-            subtitle = "Overspent · payday in \(days) day\(days == 1 ? "" : "s")"
-        } else if days == 0 {
-            subtitle = "Payday is today"
-        } else {
-            subtitle = "Left for \(days) day\(days == 1 ? "" : "s")"
+        // The first message hands the screen to the conversation.
+        .onChange(of: model.messages.count) { old, new in
+            if old == 0 && new > 0 {
+                withAnimation(.fbModal) { headerCollapsed = true }
+            } else if new == 0 {
+                withAnimation(.fbModal) { headerCollapsed = false }
+            }
         }
-
-        return VStack(alignment: .leading, spacing: 2) {
-            Text(Money.string(safe))
-                .font(.fbNumber(44, weight: .bold))
-                .foregroundStyle(isOverspent ? Color.fbWarning : Color.fbInk)
-                .minimumScaleFactor(0.5)
-                .lineLimit(1)
-                .contentTransition(.numericText(value: safe))
-                .animation(.spring(response: 0.5, dampingFraction: 0.8), value: safe)
-            Text(subtitle)
-                .font(.fbBody(15))
-                .foregroundStyle(Color.fbSoftText)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 20)
-        .padding(.top, 12)
-        .padding(.bottom, 12)
-        // Text swallows hits, so the background-tap catcher never fires
-        // here — the header dismisses the keyboard itself.
-        .contentShape(Rectangle())
-        .onTapGesture { inputFocused = false }
     }
 
     // MARK: Empty state — a quiet greeting mid-screen, questions at the foot
@@ -222,6 +278,10 @@ struct AskView: View {
                     ForEach(model.messages) { message in
                         MessageBubble(message: message)
                             .id(message.id)
+                        if awaitsDecision(message) {
+                            ProposalDecisionButtons(onConfirm: { model.confirmPending() },
+                                                    onCancel: { model.cancelPending() })
+                        }
                     }
                     if model.isThinking {
                         ThinkingBubble()
@@ -237,6 +297,16 @@ struct AskView: View {
             }
             .scrollDismissesKeyboard(.immediately)
             .scrollEdgeEffectStyle(.soft, for: .vertical)
+            // Scrolling the transcript keeps the hero minimised; pulling
+            // down past the top (rubber-band) brings it back.
+            .onScrollGeometryChange(for: CGFloat.self,
+                                    of: { $0.contentOffset.y + $0.contentInsets.top }) { _, offset in
+                if offset < -50, headerCollapsed {
+                    withAnimation(.fbModal) { headerCollapsed = false }
+                } else if offset > 12, !headerCollapsed, !model.messages.isEmpty {
+                    withAnimation(.fbModal) { headerCollapsed = true }
+                }
+            }
             .onChange(of: model.messages.count) {
                 withAnimation { proxy.scrollTo(model.messages.last?.id, anchor: .bottom) }
             }
@@ -342,6 +412,15 @@ struct AskView: View {
         .padding(.bottom, 12)
     }
 
+    /// A message keeps its decision card only while its proposals are
+    /// still the pending set — confirming, cancelling or re-proposing
+    /// makes it a plain transcript line again.
+    private func awaitsDecision(_ message: ChatMessage) -> Bool {
+        message.role == .assistant
+            && !message.proposedActions.isEmpty
+            && message.proposedActions == model.pendingActions
+    }
+
     private var canSend: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !model.isThinking
     }
@@ -350,6 +429,87 @@ struct AskView: View {
         let text = draft
         draft = ""
         model.send(text, snapshot: store.finances)
+    }
+}
+
+// MARK: - Header bar — THE number, big, first
+
+/// The Ask tab's title bar: the safe-to-spend hero. Rendered by the
+/// pager's top `safeAreaBar` in ContentView (only the outermost scroll
+/// view gets the soft edge blur), with the collapse state driven by
+/// AskView's transcript.
+struct AskHeaderBar: View {
+    let store: FinanceBuddyStore
+    let collapsed: Bool
+
+    var body: some View {
+        let safe = store.finances.safeToSpendToday()
+        let days = store.finances.daysUntilPayday()
+        let isOverspent = safe < 0
+
+        let subtitle: String
+        if isOverspent {
+            subtitle = "Overspent · payday in \(days) day\(days == 1 ? "" : "s")"
+        } else if days == 0 {
+            subtitle = "Payday is today"
+        } else {
+            subtitle = "Left for \(days) day\(days == 1 ? "" : "s")"
+        }
+
+        let collapsedSuffix = isOverspent ? "overspent"
+            : (days == 0 ? "payday today" : "for \(days) day\(days == 1 ? "" : "s")")
+
+        return VStack(alignment: .leading, spacing: 2) {
+            if !collapsed {
+                Text(Date().formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                    .font(.fbBody(14))
+                    .foregroundStyle(Color.fbSoftText)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            // The amount and its collapsed suffix scale together (not a
+            // font swap) so the minimise glides. The suffix is oversized
+            // pre-scale so it lands at body size once shrunk.
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(Money.string(safe))
+                    .font(.fbNumber(44, weight: .bold))
+                    .foregroundStyle(isOverspent ? Color.fbWarning : Color.fbInk)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .contentTransition(.numericText(value: safe))
+                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: safe)
+                if collapsed {
+                    Text(collapsedSuffix)
+                        .font(.fbBody(23))
+                        .foregroundStyle(Color.fbSoftText)
+                        .transition(.opacity)
+                }
+            }
+            .scaleEffect(collapsed ? 0.62 : 1, anchor: .bottomLeading)
+            .frame(height: collapsed ? 32 : 50, alignment: .bottomLeading)
+
+            if !collapsed {
+                Text(subtitle)
+                    .font(.fbBody(15))
+                    .foregroundStyle(Color.fbSoftText)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 20)
+        .padding(.top, collapsed ? 6 : 12)
+        .padding(.bottom, collapsed ? 8 : 12)
+        .animation(.fbModal, value: collapsed)
+        // Text swallows hits, so AskView's background-tap catcher never
+        // fires here — the header dismisses the keyboard itself. It lives
+        // outside AskView's focus scope, so it resigns first responder.
+        .contentShape(Rectangle())
+        .onTapGesture {
+            #if os(iOS)
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder),
+                                            to: nil, from: nil, for: nil)
+            #endif
+        }
     }
 }
 
@@ -370,8 +530,10 @@ private struct MessageBubble: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background(
+                        // Bright bubble, dark text — same contrast pairing
+                        // as the primary buttons.
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Color.fbCommitment)
+                            .fill(Color.fbPositive)
                     )
             }
         } else {
@@ -382,6 +544,23 @@ private struct MessageBubble: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 4)
         }
+    }
+}
+
+/// The tap targets for a staged write: Confirm on top, Cancel below —
+/// the design system's vertical stack, never side-by-side. Typing or
+/// dictating "confirm"/"cancel" still works through the same paths.
+private struct ProposalDecisionButtons: View {
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            FBPrimaryButton(label: "Confirm", action: onConfirm)
+            FBSecondaryButton(label: "Cancel", action: onCancel)
+        }
+        .padding(.top, 2)
+        .transition(.opacity)
     }
 }
 
@@ -406,40 +585,6 @@ private struct ThinkingBubble: View {
     }
 }
 
-// MARK: - Living background
-
-/// Two or three big, heavily blurred monochrome blobs drifting on slow
-/// sine paths — a barely-there pulse so the screen doesn't feel static.
-private struct BlobBackground: View {
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 24)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            Canvas { context, size in
-                context.addFilter(.blur(radius: 70))
-                blob(&context, size: size, t: t, speed: 0.10, phase: 0.0,
-                     radius: 0.42, opacity: 0.09)
-                blob(&context, size: size, t: t, speed: 0.06, phase: 2.1,
-                     radius: 0.50, opacity: 0.06)
-                blob(&context, size: size, t: t, speed: 0.045, phase: 4.4,
-                     radius: 0.34, opacity: 0.075)
-            }
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-    }
-
-    private func blob(_ context: inout GraphicsContext, size: CGSize,
-                      t: Double, speed: Double, phase: Double,
-                      radius: Double, opacity: Double) {
-        let x = size.width * (0.5 + 0.38 * sin(t * speed + phase))
-        let y = size.height * (0.45 + 0.34 * cos(t * speed * 0.8 + phase * 1.3))
-        let r = size.width * radius
-        let rect = CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)
-        context.fill(Ellipse().path(in: rect),
-                     with: .color(Color.fbInk.opacity(opacity)))
-    }
-}
-
 #Preview {
     // Seed a short conversation so the preview shows real bubbles.
     let store = FinanceBuddyStore(finances: .sample)
@@ -454,6 +599,7 @@ private struct BlobBackground: View {
     let store = FinanceBuddyStore(finances: .sample)
     return PreviewModalHost(store: store) { present in
         AskView(store: store, present: present)
+            .safeAreaBar(edge: .top) { AskHeaderBar(store: store, collapsed: false) }
     }
 }
 
@@ -463,5 +609,11 @@ private struct AskViewPreview: View {
     let model: ChatViewModel
     var body: some View {
         AskView(store: store, injectedModel: model)
+            .safeAreaBar(edge: .top) { AskHeaderBar(store: store, collapsed: true) }
+            .background {
+                FBBackground()
+                FBBlobBackground()
+            }
+            .preferredColorScheme(.dark)
     }
 }

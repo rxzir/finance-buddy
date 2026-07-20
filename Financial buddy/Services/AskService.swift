@@ -65,7 +65,7 @@ struct AskResponse: Decodable {
 // MARK: - Service
 
 protocol AskServing: Sendable {
-    func ask(question: String, snapshot: Finances) async throws -> String
+    func ask(question: String, snapshot: Finances) async throws -> AskResult
 }
 
 enum AskError: LocalizedError {
@@ -80,15 +80,15 @@ enum AskError: LocalizedError {
     }
 }
 
-/// Posts the snapshot + question to our backend. Falls back to the local
-/// reasoner when no endpoint is configured.
+/// Tier 2: posts the snapshot + question to our backend. Falls back to
+/// the local reasoner when no endpoint is configured.
 struct AskService: AskServing {
     var endpoint: URL? = AskConfig.endpoint
     var session: URLSession = .shared
 
-    func ask(question: String, snapshot: Finances) async throws -> String {
+    func ask(question: String, snapshot: Finances) async throws -> AskResult {
         guard let endpoint else {
-            return LocalReasoner.answer(to: question, finances: snapshot)
+            return AskResult(text: LocalReasoner.answer(to: question, finances: snapshot))
         }
 
         var request = URLRequest(url: endpoint)
@@ -107,6 +107,6 @@ struct AskService: AskServing {
         guard let decoded = try? JSONDecoder().decode(AskResponse.self, from: data) else {
             throw AskError.decoding
         }
-        return decoded.answer
+        return AskResult(text: decoded.answer)
     }
 }

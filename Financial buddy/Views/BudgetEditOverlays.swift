@@ -28,6 +28,7 @@ struct EditTodayOverlay: View {
     @State private var showIncome = false
     @State private var showIncomeForm = false
     @State private var incomeDraft = IncomeDraft()
+    @State private var showDatePicker = false
 
     init(store: FinanceBuddyStore, onClose: @escaping () -> Void) {
         self.store = store
@@ -42,30 +43,50 @@ struct EditTodayOverlay: View {
             ModalCard(depth: mainDepth) { mainForm }
 
             if showIncome {
-                ModalCard(depth: showIncomeForm ? 1 : 0) { incomeList }
+                ModalCard(depth: incomeListDepth) { incomeList }
                     .transition(.fbModalPush)
                     .zIndex(1)
             }
 
             if showIncomeForm {
-                ModalCard { incomeForm }
+                ModalCard(depth: showDatePicker ? 1 : 0) { incomeForm }
                     .transition(.fbModalPush)
                     .zIndex(2)
+            }
+
+            if showDatePicker {
+                FBDatePickerCard(label: "Date", date: $incomeDraft.date) {
+                    showDatePicker = false
+                }
+                .transition(.fbModalPush)
+                .zIndex(3)
             }
         }
         .transition(.opacity)
         .animation(.fbModal, value: showIncome)
         .animation(.fbModal, value: showIncomeForm)
+        .animation(.fbModal, value: showDatePicker)
     }
 
     private var mainDepth: Int {
-        guard showIncome else { return 0 }
-        return showIncomeForm ? 2 : 1
+        var d = 0
+        if showIncome { d += 1 }
+        if showIncomeForm { d += 1 }
+        if showDatePicker { d += 1 }
+        return d
+    }
+
+    private var incomeListDepth: Int {
+        var d = 0
+        if showIncomeForm { d += 1 }
+        if showDatePicker { d += 1 }
+        return d
     }
 
     /// Backdrop taps dismiss only the frontmost layer.
     private func backdropTapped() {
-        if showIncomeForm { showIncomeForm = false }
+        if showDatePicker { showDatePicker = false }
+        else if showIncomeForm { showIncomeForm = false }
         else if showIncome { showIncome = false }
         else { onClose() }
     }
@@ -73,15 +94,10 @@ struct EditTodayOverlay: View {
     // MARK: Layer 0 — balance & payday
 
     private var mainForm: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Edit your numbers")
-                .font(.fbHeader(20))
-                .tracking(-0.3)
-                .foregroundStyle(Color.fbInk)
+        VStack(alignment: .leading, spacing: 24) {
+            ModalHeader(title: "Edit your numbers", onClose: onClose)
 
-            LabeledField(label: "Current balance") {
-                CurrencyField(value: $balance)
-            }
+            CurrencyField(label: "Current balance", value: $balance)
 
             // Payday is derived from recurring income dates, so income is
             // the only other thing to manage — one card up the stack.
@@ -100,22 +116,12 @@ struct EditTodayOverlay: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Color.fbSoftText)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 13)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.fbBackground)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(Color.fbHairline, lineWidth: 1)
-                )
+                .contentShape(Rectangle())
             }
             .buttonStyle(.pressable)
+            .padding(.bottom, 10)
 
-            ModalActionButtons(primaryLabel: "Save",
-                               onPrimary: save,
-                               onSecondary: onClose)
+            FBPrimaryButton(label: "Save", action: save)
         }
     }
 
@@ -128,16 +134,12 @@ struct EditTodayOverlay: View {
 
     private var incomeList: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Income")
-                .font(.fbHeader(20))
-                .tracking(-0.3)
-                .foregroundStyle(Color.fbInk)
+            ModalHeader(title: "Income") { showIncome = false }
 
-            ScrollView {
-                VStack(spacing: 2) {
-                    if store.finances.incomeSources.isEmpty {
-                        ModalEmptyHint(text: "No income yet.")
-                    }
+            if store.finances.incomeSources.isEmpty {
+                ModalEmptyHint(text: "No income yet.")
+            } else {
+                List {
                     ForEach(store.finances.incomeSources) { source in
                         ModalItemRow(name: source.name,
                                      detail: source.isRecurring
@@ -152,21 +154,21 @@ struct EditTodayOverlay: View {
                                                                    category: source.category,
                                                                    date: source.date)
                                          showIncomeForm = true
-                                     },
-                                     onDelete: { store.removeIncome(source) })
+                                     })
+                            .modalListRow { store.removeIncome(source) }
                     }
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .frame(maxHeight: 240)
+                .scrollEdgeEffectStyle(.soft, for: .vertical)
             }
-            .frame(maxHeight: 240)
 
-            VStack(spacing: 10) {
-                FBPrimaryButton(label: "Add") {
-                    var draft = IncomeDraft()
-                    draft.category = store.finances.incomeCategories.first ?? "General"
-                    incomeDraft = draft
-                    showIncomeForm = true
-                }
-                FBSecondaryButton(label: "Done") { showIncome = false }
+            FBPrimaryButton(label: "Add") {
+                var draft = IncomeDraft()
+                draft.category = store.finances.incomeCategories.first ?? "General"
+                incomeDraft = draft
+                showIncomeForm = true
             }
         }
     }
@@ -175,18 +177,16 @@ struct EditTodayOverlay: View {
 
     private var incomeForm: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(incomeDraft.id == nil ? "New income" : "Edit income")
-                .font(.fbHeader(20))
-                .tracking(-0.3)
-                .foregroundStyle(Color.fbInk)
+            ModalHeader(title: incomeDraft.id == nil ? "New income" : "Edit income") {
+                showIncomeForm = false
+            }
 
             IncomeFormFields(draft: $incomeDraft,
-                             categories: store.finances.incomeCategories)
+                             categories: store.finances.incomeCategories,
+                             showDatePicker: $showDatePicker)
 
-            ModalActionButtons(primaryLabel: "Save",
-                               primaryEnabled: incomeDraft.isValid,
-                               onPrimary: saveIncomeDraft,
-                               onSecondary: { showIncomeForm = false })
+            FBPrimaryButton(label: "Save", enabled: incomeDraft.isValid,
+                            action: saveIncomeDraft)
         }
     }
 
@@ -210,41 +210,47 @@ struct ManageCommitmentsOverlay: View {
     let onClose: () -> Void
 
     @State private var showForm = false
+    @State private var showDatePicker = false
     @State private var draft = PaymentDraft()
 
     var body: some View {
         ZStack {
             ModalBackdrop {
-                if showForm { showForm = false } else { onClose() }
+                if showDatePicker { showDatePicker = false }
+                else if showForm { showForm = false }
+                else { onClose() }
             }
 
-            ModalCard(depth: showForm ? 1 : 0) { list }
+            ModalCard(depth: showForm ? (showDatePicker ? 2 : 1) : 0) { list }
 
             if showForm {
-                ModalCard { form }
+                ModalCard(depth: showDatePicker ? 1 : 0) { form }
                     .transition(.fbModalPush)
                     .zIndex(1)
+            }
+
+            if showDatePicker {
+                FBDatePickerCard(label: "Date", date: $draft.date) { showDatePicker = false }
+                    .transition(.fbModalPush)
+                    .zIndex(2)
             }
         }
         .transition(.opacity)
         .animation(.fbModal, value: showForm)
+        .animation(.fbModal, value: showDatePicker)
     }
 
     // MARK: List layer
 
     private var list: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Upcoming payments")
-                .font(.fbHeader(20))
-                .tracking(-0.3)
-                .foregroundStyle(Color.fbInk)
+            ModalHeader(title: "Upcoming payments", onClose: onClose)
 
-            ScrollView {
-                VStack(spacing: 2) {
-                    if store.finances.recurringCommitments.isEmpty
-                        && store.finances.oneOffCosts.isEmpty {
-                        ModalEmptyHint(text: "No payments yet.")
-                    }
+            if store.finances.recurringCommitments.isEmpty
+                && store.finances.oneOffCosts.isEmpty {
+                ModalEmptyHint(text: "No payments yet.")
+            } else {
+                List {
                     ForEach(store.finances.recurringCommitments) { c in
                         ModalItemRow(name: c.name,
                                      detail: "Monthly · \(c.category)",
@@ -259,8 +265,8 @@ struct ManageCommitmentsOverlay: View {
                                                                            onOrAfter: Date(),
                                                                            calendar: .current))
                                          showForm = true
-                                     },
-                                     onDelete: { store.removeCommitment(c) })
+                                     })
+                            .modalListRow { store.removeCommitment(c) }
                     }
                     ForEach(store.finances.oneOffCosts) { o in
                         ModalItemRow(name: o.name,
@@ -272,21 +278,21 @@ struct ManageCommitmentsOverlay: View {
                                                               isRecurring: false,
                                                               date: o.date)
                                          showForm = true
-                                     },
-                                     onDelete: { store.removeOneOff(o) })
+                                     })
+                            .modalListRow { store.removeOneOff(o) }
                     }
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .frame(maxHeight: 260)
+                .scrollEdgeEffectStyle(.soft, for: .vertical)
             }
-            .frame(maxHeight: 260)
 
-            VStack(spacing: 10) {
-                FBPrimaryButton(label: "Add") {
-                    var new = PaymentDraft()
-                    new.category = store.finances.paymentCategories.first ?? "General"
-                    draft = new
-                    showForm = true
-                }
-                FBSecondaryButton(label: "Done", action: onClose)
+            FBPrimaryButton(label: "Add") {
+                var new = PaymentDraft()
+                new.category = store.finances.paymentCategories.first ?? "General"
+                draft = new
+                showForm = true
             }
         }
     }
@@ -295,18 +301,16 @@ struct ManageCommitmentsOverlay: View {
 
     private var form: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(draft.id == nil ? "New payment" : "Edit payment")
-                .font(.fbHeader(20))
-                .tracking(-0.3)
-                .foregroundStyle(Color.fbInk)
+            ModalHeader(title: draft.id == nil ? "New payment" : "Edit payment") {
+                showForm = false
+            }
 
             PaymentFormFields(draft: $draft,
-                              categories: store.finances.paymentCategories)
+                              categories: store.finances.paymentCategories,
+                              showDatePicker: $showDatePicker)
 
-            ModalActionButtons(primaryLabel: "Save",
-                               primaryEnabled: draft.isValid,
-                               onPrimary: saveDraft,
-                               onSecondary: { showForm = false })
+            FBPrimaryButton(label: "Save", enabled: draft.isValid,
+                            action: saveDraft)
         }
     }
 

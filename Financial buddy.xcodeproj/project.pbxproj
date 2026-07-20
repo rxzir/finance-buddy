@@ -10,8 +10,19 @@
 		718C855B2FFF1A1A00B000AA /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 718C855A2FFF1A1A00B000AA /* Supabase */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		718C85E5300D195200B000AA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 718C85162FFEAE9300B000AA /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 718C851D2FFEAE9300B000AA;
+			remoteInfo = "Financial buddy";
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		718C851E2FFEAE9300B000AA /* Financial buddy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Financial buddy.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		718C85E1300D195200B000AA /* Financial buddyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Financial buddyTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -33,6 +44,11 @@
 			path = "Financial buddy";
 			sourceTree = "<group>";
 		};
+		718C85E2300D195200B000AA /* Financial buddyTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Financial buddyTests";
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -44,6 +60,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		718C85DE300D195200B000AA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -51,6 +74,7 @@
 			isa = PBXGroup;
 			children = (
 				718C85202FFEAE9300B000AA /* Financial buddy */,
+				718C85E2300D195200B000AA /* Financial buddyTests */,
 				718C85592FFF1A1A00B000AA /* Frameworks */,
 				718C851F2FFEAE9300B000AA /* Products */,
 			);
@@ -60,6 +84,7 @@
 			isa = PBXGroup;
 			children = (
 				718C851E2FFEAE9300B000AA /* Financial buddy.app */,
+				718C85E1300D195200B000AA /* Financial buddyTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -97,6 +122,29 @@
 			productReference = 718C851E2FFEAE9300B000AA /* Financial buddy.app */;
 			productType = "com.apple.product-type.application";
 		};
+		718C85E0300D195200B000AA /* Financial buddyTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 718C85E7300D195200B000AA /* Build configuration list for PBXNativeTarget "Financial buddyTests" */;
+			buildPhases = (
+				718C85DD300D195200B000AA /* Sources */,
+				718C85DE300D195200B000AA /* Frameworks */,
+				718C85DF300D195200B000AA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				718C85E6300D195200B000AA /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				718C85E2300D195200B000AA /* Financial buddyTests */,
+			);
+			name = "Financial buddyTests";
+			packageProductDependencies = (
+			);
+			productName = "Financial buddyTests";
+			productReference = 718C85E1300D195200B000AA /* Financial buddyTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -109,6 +157,10 @@
 				TargetAttributes = {
 					718C851D2FFEAE9300B000AA = {
 						CreatedOnToolsVersion = 26.6;
+					};
+					718C85E0300D195200B000AA = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 718C851D2FFEAE9300B000AA;
 					};
 				};
 			};
@@ -130,12 +182,20 @@
 			projectRoot = "";
 			targets = (
 				718C851D2FFEAE9300B000AA /* Financial buddy */,
+				718C85E0300D195200B000AA /* Financial buddyTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		718C851C2FFEAE9300B000AA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		718C85DF300D195200B000AA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -152,7 +212,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		718C85DD300D195200B000AA /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		718C85E6300D195200B000AA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 718C851D2FFEAE9300B000AA /* Financial buddy */;
+			targetProxy = 718C85E5300D195200B000AA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		718C85272FFEAE9400B000AA /* Debug */ = {
@@ -285,16 +360,22 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Financial buddy/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Finance buddy";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Finance buddy locks your financial data behind Face ID so only you can see it.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "The microphone is used to dictate questions on the Ask tab.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Your voice is transcribed on-device so you can ask questions hands-free.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UIStatusBarHidden = NO;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
@@ -305,13 +386,14 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.5;
 			};
 			name = Debug;
@@ -330,16 +412,22 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Financial buddy/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Finance buddy";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.finance";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Finance buddy locks your financial data behind Face ID so only you can see it.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "The microphone is used to dictate questions on the Ask tab.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Your voice is transcribed on-device so you can ask questions hands-free.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
+				INFOPLIST_KEY_UIStatusBarHidden = NO;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphonesimulator*]" = UIStatusBarStyleDefault;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
@@ -350,14 +438,62 @@
 				REGISTER_APP_GROUPS = YES;
 				SDKROOT = auto;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx xros xrsimulator";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2,7";
+				TARGETED_DEVICE_FAMILY = "1,2";
 				XROS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Release;
+		};
+		718C85E8300D195200B000AA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PAB989QS69;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "recr3ate.Financial-buddyTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Financial buddy.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Financial buddy";
+			};
+			name = Debug;
+		};
+		718C85E9300D195200B000AA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PAB989QS69;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.5;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "recr3ate.Financial-buddyTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Financial buddy.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Financial buddy";
+				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
 		};
@@ -378,6 +514,15 @@
 			buildConfigurations = (
 				718C852A2FFEAE9400B000AA /* Debug */,
 				718C852B2FFEAE9400B000AA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		718C85E7300D195200B000AA /* Build configuration list for PBXNativeTarget "Financial buddyTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				718C85E8300D195200B000AA /* Debug */,
+				718C85E9300D195200B000AA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

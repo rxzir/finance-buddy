@@ -23,6 +23,10 @@ final class FinanceBuddyStore {
     /// launch once the user is signed in.
     @ObservationIgnored var persistence: FinancePersisting?
 
+    /// Bottom toasts for add/delete feedback. Deletions carry an undo
+    /// that restores the pre-delete snapshot.
+    let toasts = ToastCenter()
+
     private var saveTask: Task<Void, Never>?
 
     init(finances: Finances = .empty, persistence: FinancePersisting? = nil) {
@@ -34,10 +38,14 @@ final class FinanceBuddyStore {
 
     func addCommitment(_ c: RecurringCommitment) {
         finances.recurringCommitments.append(c)
+        toasts.show("\(c.name) added")
     }
 
     func removeCommitment(_ c: RecurringCommitment) {
         finances.recurringCommitments.removeAll { $0.id == c.id }
+        toasts.show("\(c.name) deleted", undo: { [weak self] in
+            self?.finances.recurringCommitments.append(c)
+        })
     }
 
     func updateCommitment(_ c: RecurringCommitment) {
@@ -48,10 +56,14 @@ final class FinanceBuddyStore {
 
     func addOneOff(_ o: OneOffCost) {
         finances.oneOffCosts.append(o)
+        toasts.show("\(o.name) added")
     }
 
     func removeOneOff(_ o: OneOffCost) {
         finances.oneOffCosts.removeAll { $0.id == o.id }
+        toasts.show("\(o.name) deleted", undo: { [weak self] in
+            self?.finances.oneOffCosts.append(o)
+        })
     }
 
     func updateOneOff(_ o: OneOffCost) {
@@ -62,10 +74,14 @@ final class FinanceBuddyStore {
 
     func addIncome(_ s: IncomeSource) {
         finances.incomeSources.append(s)
+        toasts.show("\(s.name) added")
     }
 
     func removeIncome(_ s: IncomeSource) {
         finances.incomeSources.removeAll { $0.id == s.id }
+        toasts.show("\(s.name) deleted", undo: { [weak self] in
+            self?.finances.incomeSources.append(s)
+        })
     }
 
     func updateIncome(_ s: IncomeSource) {
@@ -104,6 +120,25 @@ final class FinanceBuddyStore {
             for i in finances.recurringCommitments.indices where finances.recurringCommitments[i].category == old {
                 finances.recurringCommitments[i].category = trimmed
             }
+        }
+    }
+
+    /// Reorders categories (drag-and-drop in the manage modal). Mirrors
+    /// SwiftUI's move(fromOffsets:toOffset:) semantics without importing
+    /// SwiftUI into the model layer.
+    func moveCategories(fromOffsets: IndexSet, toOffset: Int, forIncome: Bool) {
+        func moved(_ array: [String]) -> [String] {
+            let moving = fromOffsets.map { array[$0] }
+            var rest = array
+            for index in fromOffsets.sorted(by: >) { rest.remove(at: index) }
+            let insertAt = toOffset - fromOffsets.filter { $0 < toOffset }.count
+            rest.insert(contentsOf: moving, at: insertAt)
+            return rest
+        }
+        if forIncome {
+            finances.incomeCategories = moved(finances.incomeCategories)
+        } else {
+            finances.paymentCategories = moved(finances.paymentCategories)
         }
     }
 

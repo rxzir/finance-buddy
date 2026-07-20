@@ -87,6 +87,40 @@ struct FBBackground: View {
     }
 }
 
+/// Two or three big, heavily blurred monochrome blobs drifting on slow
+/// sine paths — a barely-there pulse so the app doesn't feel static.
+/// Mounted once at the root (behind every page) so it never cuts off
+/// while swiping between tabs.
+struct FBBlobBackground: View {
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 24)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            Canvas { context, size in
+                context.addFilter(.blur(radius: 70))
+                blob(&context, size: size, t: t, speed: 0.10, phase: 0.0,
+                     radius: 0.42, opacity: 0.09)
+                blob(&context, size: size, t: t, speed: 0.06, phase: 2.1,
+                     radius: 0.50, opacity: 0.06)
+                blob(&context, size: size, t: t, speed: 0.045, phase: 4.4,
+                     radius: 0.34, opacity: 0.075)
+            }
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+
+    private func blob(_ context: inout GraphicsContext, size: CGSize,
+                      t: Double, speed: Double, phase: Double,
+                      radius: Double, opacity: Double) {
+        let x = size.width * (0.5 + 0.38 * sin(t * speed + phase))
+        let y = size.height * (0.45 + 0.34 * cos(t * speed * 0.8 + phase * 1.3))
+        let r = size.width * radius
+        let rect = CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)
+        context.fill(Ellipse().path(in: rect),
+                     with: .color(Color.fbInk.opacity(opacity)))
+    }
+}
+
 // MARK: - Typography
 
 extension Font {
@@ -228,8 +262,34 @@ struct FBPrimaryButton: View {
     }
 }
 
-/// A labelled switch styled like the app's form fields — used for the
-/// recurring/one-off choice everywhere.
+/// The app's own switch: a mono capsule with a gliding knob — the native
+/// toggle's tinting sits oddly in this palette.
+struct FBSwitchStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack {
+            configuration.label
+            Spacer()
+            Button {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+                    configuration.isOn.toggle()
+                }
+            } label: {
+                Capsule()
+                    .fill(configuration.isOn ? Color.fbPositive : Color.fbInk.opacity(0.12))
+                    .overlay(Capsule().strokeBorder(Color.fbHairline, lineWidth: 1))
+                    .overlay(alignment: configuration.isOn ? .trailing : .leading) {
+                        Circle()
+                            .fill(configuration.isOn ? Color.fbOnAccent : Color.fbSoftText)
+                            .padding(3)
+                    }
+                    .frame(width: 46, height: 28)
+            }
+            .buttonStyle(.pressable)
+        }
+    }
+}
+
+/// A labelled switch row — plain, no container; sits at the end of forms.
 struct FBToggleRow: View {
     let label: String
     @Binding var isOn: Bool
@@ -240,17 +300,7 @@ struct FBToggleRow: View {
                 .font(.fbBody(15, weight: .medium))
                 .foregroundStyle(Color.fbInk)
         }
-        .tint(Color.fbPositive)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.fbBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.fbHairline, lineWidth: 1)
-        )
+        .toggleStyle(FBSwitchStyle())
     }
 }
 
@@ -276,6 +326,89 @@ struct FBSecondaryButton: View {
                 )
         }
         .buttonStyle(.pressable)
+    }
+}
+
+// MARK: - Toasts
+
+/// App-wide bottom toasts ("Rent added", "Gym deleted" + Undo). One at a
+/// time; showing a new one replaces the current. Deletions pass an undo
+/// closure and get a little longer on screen.
+@MainActor
+@Observable
+final class ToastCenter {
+    struct Toast: Identifiable, Equatable {
+        let id = UUID()
+        let message: String
+        let undo: (() -> Void)?
+
+        static func == (lhs: Toast, rhs: Toast) -> Bool { lhs.id == rhs.id }
+    }
+
+    private(set) var current: Toast?
+    @ObservationIgnored private var dismissTask: Task<Void, Never>?
+
+    func show(_ message: String, undo: (() -> Void)? = nil) {
+        dismissTask?.cancel()
+        let toast = Toast(message: message, undo: undo)
+        current = toast
+        dismissTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(undo == nil ? 2.5 : 4))
+            guard !Task.isCancelled else { return }
+            if self?.current?.id == toast.id { self?.current = nil }
+        }
+    }
+
+    func dismiss() {
+        dismissTask?.cancel()
+        current = nil
+    }
+}
+
+/// The toast itself: a small floating card rising from the bottom, above
+/// everything — including open modals.
+struct FBToastView: View {
+    var center: ToastCenter
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            if let toast = center.current {
+                HStack(spacing: 14) {
+                    Text(toast.message)
+                        .font(.fbBody(14, weight: .medium))
+                        .foregroundStyle(Color.fbInk)
+                        .lineLimit(1)
+                    if let undo = toast.undo {
+                        Button {
+                            undo()
+                            center.dismiss()
+                        } label: {
+                            Text("Undo")
+                                .font(.fbBody(14, weight: .bold))
+                                .foregroundStyle(Color.fbPositive)
+                        }
+                        .buttonStyle(.pressable)
+                    }
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 13)
+                .background(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .fill(Color.fbCard)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .strokeBorder(Color.fbHairline, lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.25), radius: 14, y: 4)
+                .onTapGesture { center.dismiss() }
+                .padding(.bottom, 12)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .id(toast.id)
+            }
+        }
+        .animation(.fbModal, value: center.current)
     }
 }
 

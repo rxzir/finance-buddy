@@ -58,6 +58,12 @@ struct PreviewModalHost<Content: View>: View {
 
     var body: some View {
         content({ modal = $0 })
+            .background {
+                // Pages are transparent; previews supply what the root
+                // normally does.
+                FBBackground()
+                FBBlobBackground()
+            }
             .overlay { AppModalLayer(store: store, modal: $modal) }
             .animation(.fbModal, value: modal)
             .preferredColorScheme(.dark)
@@ -69,6 +75,9 @@ struct ContentView: View {
     @State private var lock = AppLock()
     @State private var tab: Tab = .ask
     @State private var keyboardVisible = false
+    /// Ask's hero header collapse — owned here because the header renders
+    /// in the pager's top bar, but AskView's transcript drives it.
+    @State private var askHeaderCollapsed = false
     /// The one modal that's up, rendered at the root above the tab bar.
     @State private var modal: AppModal?
     @AppStorage("fbAppearance") private var appearanceRaw = FBAppearance.dark.rawValue
@@ -90,6 +99,9 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             FBBackground()
+            // One shared living background — pages are transparent so it
+            // stays continuous while swiping between tabs.
+            FBBlobBackground()
 
             if lock.isUnlocked {
                 postUnlock
@@ -147,29 +159,43 @@ struct ContentView: View {
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: pagedTab)
         .scrollIndicators(.hidden)
-        // Soft progressive-blur fade where content meets the top edge and
-        // the tab bar pocket — every vertical scroll in the hierarchy.
+        // Soft progressive-blur pockets where page content meets the
+        // bars. iOS only renders edge effects for the outermost scroll
+        // view, so this must sit on the pager — a per-page
+        // scrollEdgeEffectStyle/safeAreaBar never blurs.
         .scrollEdgeEffectStyle(.soft, for: .vertical)
-        // A real bar (not a VStack sibling): pages scroll under it and the
-        // system fades content into its pocket. It only makes way for the
-        // keyboard — modals don't move it, they simply cover it.
+        // Title bar lives here for the same reason: pages scroll under it
+        // and the system fades content into its pocket. Its content swaps
+        // with the selected tab.
+        .safeAreaBar(edge: .top) { titleBar }
+        // Tab bar lives here — fixed above the pager so it never slides
+        // with page content during horizontal swipes.
         .safeAreaBar(edge: .bottom) {
             if !keyboardVisible {
                 CustomTabBar(selection: pagedTab)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        // The modal layer sits OUTSIDE the safe-area bar, so it always
-        // draws in front of the tab bar; the backdrop dims the bar along
-        // with the rest of the screen.
-        .overlay { modalLayer }
         .animation(.easeInOut(duration: 0.2), value: keyboardVisible)
+        // Modal and toast overlays sit above the tab bar in z-order.
+        .overlay { modalLayer }
+        .overlay { FBToastView(center: store.toasts) }
         .animation(.fbModal, value: modal)
         .observeKeyboard(isVisible: $keyboardVisible)
     }
 
     private var modalLayer: some View {
         AppModalLayer(store: store, modal: $modal, onSignOut: performSignOut)
+    }
+
+    /// The pager's top bar: each tab's title, crossfading on tab change.
+    @ViewBuilder
+    private var titleBar: some View {
+        switch tab {
+        case .ask:     AskHeaderBar(store: store, collapsed: askHeaderCollapsed)
+        case .budget:  PageTitleBar(title: "Budget")
+        case .profile: PageTitleBar(title: "Profile")
+        }
     }
 
     private func performSignOut() async {
@@ -197,11 +223,15 @@ struct ContentView: View {
     @ViewBuilder
     private func pageView(for page: Tab) -> some View {
         switch page {
-        case .ask:     AskView(store: store, isActive: tab == .ask,
-                               present: { modal = $0 })
-        case .budget:  BudgetView(store: store,
-                                  present: { modal = $0 })
-        case .profile: profileView
+        case .ask:
+            AskView(store: store, isActive: tab == .ask,
+                    headerCollapsed: $askHeaderCollapsed,
+                    present: { modal = $0 })
+        case .budget:
+            BudgetView(store: store,
+                       present: { modal = $0 })
+        case .profile:
+            profileView
         }
     }
 
@@ -264,6 +294,25 @@ enum Tab: CaseIterable {
         case .budget:  return "chart.pie.fill"
         case .profile: return "person.crop.circle"
         }
+    }
+}
+
+/// The plain page title bar (Budget / Profile), rendered in the pager's
+/// top safeAreaBar so the soft edge blur pockets under it.
+struct PageTitleBar: View {
+    let title: String
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.fbHeader(28))
+                .tracking(-0.5)
+                .foregroundStyle(Color.fbInk)
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
     }
 }
 
@@ -347,10 +396,13 @@ struct CustomTabBar: View {
                     ForEach(Tab.allCases, id: \.self) { page in
                         Group {
                             switch page {
-                            case .ask:     AskView(store: store, present: { modal = $0 })
-                            case .budget:  BudgetView(store: store, present: { modal = $0 })
-                            case .profile: ProfileView(store: store, email: "preview@example.com",
-                                                       canSignOut: true, present: { modal = $0 })
+                            case .ask:
+                                AskView(store: store, present: { modal = $0 })
+                            case .budget:
+                                BudgetView(store: store, present: { modal = $0 })
+                            case .profile:
+                                ProfileView(store: store, email: "preview@example.com",
+                                            canSignOut: true, present: { modal = $0 })
                             }
                         }
                         .containerRelativeFrame(.horizontal)
@@ -362,12 +414,20 @@ struct CustomTabBar: View {
             .scrollPosition(id: $tab)
             .scrollIndicators(.hidden)
             .scrollEdgeEffectStyle(.soft, for: .vertical)
-            .safeAreaBar(edge: .bottom) {
-                CustomTabBar(selection: $tab)
+            .safeAreaBar(edge: .top) {
+                switch tab {
+                case .budget:  PageTitleBar(title: "Budget")
+                case .profile: PageTitleBar(title: "Profile")
+                default:       AskHeaderBar(store: store, collapsed: false)
+                }
             }
+            .safeAreaBar(edge: .bottom) { CustomTabBar(selection: $tab) }
             .overlay { AppModalLayer(store: store, modal: $modal) }
             .animation(.fbModal, value: modal)
-            .background(Color.fbBackground)
+            .background {
+                FBBackground()
+                FBBlobBackground()
+            }
             .preferredColorScheme(.dark)
         }
     }

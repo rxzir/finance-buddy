@@ -3,9 +3,9 @@
 //  Finance buddy
 //
 //  One scrollable screen:
-//  1. TODAY — safe-to-spend hero floating on the background (no card),
-//     then a card with the month bar / flow view. Pencil edits
-//     balance/payday/income.
+//  1. TODAY — everything floats card-less on the background: the chart
+//     toggle + edit pencil, the safe-to-spend hero, then the month bar /
+//     flow view.
 //  2. UPCOMING PAYMENTS — recurring + one-offs merged into one list
 //     sorted by next due date; everything after payday sits under a
 //     "Next month" divider. Pencil manages the items.
@@ -30,54 +30,46 @@ struct BudgetView: View {
     }
     @State private var chartStyle: ChartStyle = .bar
     @State private var barSelection: BarSegmentInfo?
-
     private var finances: Finances { store.finances }
 
     var body: some View {
-        ZStack {
-            FBBackground()
-
-            ScrollView {
-                VStack(spacing: 16) {
-                    header
-                    hero
-                    chartCard
-                    commitmentsCard
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 4)
-                .padding(.bottom, 24)
+        // Transparent — the shared background lives at the root. The title
+        // bar is NOT attached here: iOS only renders scroll edge effects
+        // for the outermost scroll view, so inside the horizontal pager a
+        // page-owned safeAreaBar never gets the blur pocket. The pager in
+        // ContentView owns the title bar (and the tab bar) instead.
+        ScrollView {
+            VStack(spacing: 16) {
+                hero
+                commitmentsCard
             }
-            .scrollEdgeEffectStyle(.soft, for: .vertical)
+            .padding(.horizontal, 20)
+            .padding(.top, 4)
+            .padding(.bottom, 24)
         }
-    }
-
-    private var header: some View {
-        HStack {
-            Text("Budget")
-                .font(.fbHeader(28))
-                .tracking(-0.5)
-                .foregroundStyle(Color.fbInk)
-            Spacer()
-        }
-        .padding(.top, 4)
+        .scrollEdgeEffectStyle(.soft, for: .vertical)
     }
 
     // MARK: 1. Today
 
-    /// The hero floats directly on the background — no card chrome.
+    /// Everything card-less on the background: controls row, the
+    /// safe-to-spend hero, then the chosen chart.
     private var hero: some View {
         let safe = finances.safeToSpendToday()
-        let days = finances.daysUntilPayday()
         let isOverspent = safe < 0
 
-        return VStack(spacing: 4) {
-            Text(isOverspent ? "OVERSPENT" : "SAFE TO SPEND")
-                .font(.fbBody(12, weight: .semibold))
-                .tracking(1.4)
-                .foregroundStyle(Color.fbSoftText)
-            // The hero pairs safe-to-spend with the balance it comes from.
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+        return VStack(spacing: 12) {
+            HStack(alignment: .top) {
+                chartToggle
+                Spacer()
+                pencilButton { present(.editToday) }
+            }
+
+            VStack(spacing: 4) {
+                Text(isOverspent ? "OVERSPENT" : "SAFE TO SPEND")
+                    .font(.fbBody(12, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(Color.fbSoftText)
                 Text(Money.string(safe))
                     .font(.fbNumber(44, weight: .bold))
                     .foregroundStyle(isOverspent ? Color.fbWarning : Color.fbInk)
@@ -85,59 +77,51 @@ struct BudgetView: View {
                     .lineLimit(1)
                     .contentTransition(.numericText(value: safe))
                     .animation(.spring(response: 0.5, dampingFraction: 0.8), value: safe)
-                Text("of \(Money.string(finances.balance))")
-                    .font(.fbNumber(15, weight: .medium))
+                Text("of \(Money.string(finances.balance)) balance")
+                    .font(.fbBody(14, weight: .medium))
                     .foregroundStyle(Color.fbSoftText)
                     .contentTransition(.numericText(value: finances.balance))
                     .animation(.spring(response: 0.5, dampingFraction: 0.8), value: finances.balance)
             }
-            Text(days == 0 ? "Payday is today" : "\(days) day\(days == 1 ? "" : "s") until payday")
-                .font(.fbBody(14, weight: .medium))
-                .foregroundStyle(Color.fbSoftText)
+
+            chart
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
     }
 
-    private var chartCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(alignment: .top) {
-                    chartToggle
-                    Spacer()
-                    pencilButton { present(.editToday) }
-                }
-
-                // Details of a tapped bar segment; nothing otherwise (the
-                // balance lives in the hero, the chart shows the income).
-                contextRow
-
-                switch chartStyle {
-                case .bar:
-                    BalanceBar(completed: finances.paidThisMonth(),
-                               pending: finances.upcomingObligations(),
-                               safeToSpend: finances.safeToSpendToday(),
-                               selection: $barSelection)
-                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
-                case .sankey:
-                    // Income (recurring/one-time) into the three groups —
-                    // a monthly view, unlike the balance-based bar.
-                    SankeyView(sources: finances.incomeSources,
-                               recurringTotal: finances.recurringCommitments.reduce(0) { $0 + $1.amount },
-                               oneOffTotal: finances.upcomingSchedule()
-                        .filter { if case .oneOff = $0.kind { return true }; return false }
-                        .reduce(0) { $0 + $1.amount })
-                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
-                }
+    @ViewBuilder
+    private var chart: some View {
+        switch chartStyle {
+        case .bar:
+            VStack(alignment: .leading, spacing: 10) {
+                // One fixed-height row: the month's income by default,
+                // swapped in place for the tapped segment's details —
+                // the layout never resizes.
+                barStatusRow
+                BalanceBar(completed: finances.paidThisMonth(),
+                           pending: finances.upcomingObligations(),
+                           safeToSpend: finances.safeToSpendToday(),
+                           selection: $barSelection)
             }
+            .transition(.opacity.combined(with: .scale(scale: 0.97)))
+        case .sankey:
+            // Income streams into the three groups — a monthly view,
+            // unlike the balance-based bar.
+            SankeyView(sources: finances.incomeSources,
+                       recurringTotal: finances.recurringCommitments.reduce(0) { $0 + $1.amount },
+                       oneOffTotal: finances.upcomingSchedule()
+                           .filter { if case .oneOff = $0.kind { return true }; return false }
+                           .reduce(0) { $0 + $1.amount })
+                .transition(.opacity.combined(with: .scale(scale: 0.97)))
         }
     }
 
-    @ViewBuilder
-    private var contextRow: some View {
-        if chartStyle == .bar, let sel = barSelection {
-            HStack(spacing: 8) {
-                
+    /// The row above the bar. Income and selection share the exact same
+    /// typography and slot so tapping never moves the layout.
+    private var barStatusRow: some View {
+        HStack(spacing: 8) {
+            if let sel = barSelection {
                 Text(sel.name + " · \(sel.percent)%")
                     .font(.fbBody(14, weight: .medium))
                     .foregroundStyle(Color.fbInk)
@@ -146,24 +130,17 @@ struct BudgetView: View {
                 Text((sel.isCompleted ? "paid · " : "") + "\(Money.string(sel.amount))")
                     .font(.fbNumber(15, weight: .semibold))
                     .foregroundStyle(Color.fbInk)
-            }
-            .transition(.opacity.combined(with: .move(edge: .top)))
-        }
-    }
-
-    private func selectionSwatch(_ sel: BarSegmentInfo) -> some View {
-        Group {
-            if sel.isSafe {
-                StripedFill(color: Color.fbPositive, lineWidth: 1.5, spacing: 4)
-                    .background(Color.fbPositive.opacity(0.12))
-            } else if sel.isCompleted {
-                Color.fbCommitment.opacity(0.30)
             } else {
-                Color.fbInk
+                Text("Income")
+                    .font(.fbBody(14, weight: .medium))
+                    .foregroundStyle(Color.fbSoftText)
+                Spacer()
+                Text(Money.string(finances.totalIncome))
+                    .font(.fbNumber(15, weight: .semibold))
+                    .foregroundStyle(Color.fbSoftText)
             }
         }
-        .frame(width: 12, height: 12)
-        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+        .animation(.easeInOut(duration: 0.15), value: barSelection)
     }
 
     /// Two tiny icons flipping the Today visual between the eaten bar and
@@ -308,5 +285,6 @@ struct BudgetView: View {
     let store = FinanceBuddyStore(finances: .sample)
     return PreviewModalHost(store: store) { present in
         BudgetView(store: store, present: present)
+            .safeAreaBar(edge: .top) { PageTitleBar(title: "Budget") }
     }
 }

@@ -8,6 +8,11 @@
 //  form opens on top of a list, the list recedes (scales down, dims) and
 //  the form arrives with the shared fbModalPush transition.
 //
+//  Fields follow the reference style: a soft filled pill whose label
+//  doubles as the placeholder and floats into a tiny caption when the
+//  field is focused or populated. Modals close from an X in the header;
+//  footers carry a single primary action.
+//
 
 import SwiftUI
 
@@ -53,103 +58,85 @@ struct ModalCard<Content: View>: View {
     }
 }
 
-/// Vertically stacked modal actions: filled primary on top, quiet
-/// secondary below. The only footer layout modals use.
-struct ModalActionButtons: View {
-    let primaryLabel: String
-    var primaryEnabled = true
-    var destructive = false
-    let onPrimary: () -> Void
-    var secondaryLabel = "Cancel"
-    let onSecondary: () -> Void
-
-    var body: some View {
-        VStack(spacing: 10) {
-            FBPrimaryButton(label: primaryLabel, enabled: primaryEnabled,
-                            destructive: destructive, action: onPrimary)
-            FBSecondaryButton(label: secondaryLabel, action: onSecondary)
-        }
-    }
-}
-
-/// Single-card modal: backdrop + one floating card with a form body and
-/// the standard vertical Save/Cancel footer.
-struct ModalOverlay<Content: View>: View {
+/// Every modal card's first row: the title with a round close button on
+/// the right — modals have no Cancel in the footer.
+struct ModalHeader: View {
     let title: String
-    var canSave: Bool
-    var saveLabel: String = "Add"
-    let onCancel: () -> Void
-    let onSave: () -> Void
-    @ViewBuilder var content: Content
+    let onClose: () -> Void
 
     var body: some View {
-        ZStack {
-            ModalBackdrop(onTap: onCancel)
-            ModalCard {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text(title)
-                        .font(.fbHeader(20))
-                        .tracking(-0.3)
-                        .foregroundStyle(Color.fbInk)
-
-                    content
-
-                    ModalActionButtons(primaryLabel: saveLabel,
-                                       primaryEnabled: canSave,
-                                       onPrimary: onSave,
-                                       onSecondary: onCancel)
-                }
+        HStack {
+            Text(title)
+                .font(.fbHeader(20))
+                .tracking(-0.3)
+                .foregroundStyle(Color.fbInk)
+            Spacer()
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color.fbSoftText)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(Color.fbInk.opacity(0.06)))
             }
-            .transition(.fbModalPush)
+            .buttonStyle(.pressable)
+            .accessibilityLabel("Close")
         }
-        .transition(.opacity)
     }
 }
 
 // MARK: - List row & empty hint (shared by every manage modal)
 
-/// A tappable item row with a trailing delete — the one list style used
-/// in every manage modal (payments, income, categories).
+/// A tappable item row — the one list style used in every manage modal
+/// (payments, income, categories). Deletion lives on the row's
+/// swipe-left action, so there's no trailing minus button.
 struct ModalItemRow: View {
     let name: String
     let detail: String
     var amount: Double?
     let onEdit: () -> Void
-    let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: onEdit) {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(name)
-                            .font(.fbBody(16, weight: .medium))
-                            .foregroundStyle(Color.fbInk)
-                        if !detail.isEmpty {
-                            Text(detail)
-                                .font(.fbBody(13))
-                                .foregroundStyle(Color.fbSoftText)
-                        }
-                    }
-                    Spacer()
-                    if let amount {
-                        Text(Money.string(amount))
-                            .font(.fbNumber(15, weight: .medium))
-                            .foregroundStyle(Color.fbInk)
+        Button(action: onEdit) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                        .font(.fbBody(16, weight: .medium))
+                        .foregroundStyle(Color.fbInk)
+                    if !detail.isEmpty {
+                        Text(detail)
+                            .font(.fbBody(13))
+                            .foregroundStyle(Color.fbSoftText)
                     }
                 }
-                .contentShape(Rectangle())
+                Spacer()
+                if let amount {
+                    Text(Money.string(amount))
+                        .font(.fbNumber(15, weight: .medium))
+                        .foregroundStyle(Color.fbInk)
+                }
             }
-            .buttonStyle(.pressable)
-
-            Button(action: onDelete) {
-                Image(systemName: "minus.circle.fill")
-                    .font(.system(size: 20))
-                    .foregroundStyle(Color.fbWarning.opacity(0.85))
-            }
-            .buttonStyle(.pressable)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.pressable)
         .padding(.vertical, 7)
+    }
+}
+
+extension View {
+    /// Shared row chrome for Lists living inside modal cards: clear row,
+    /// no separators or default insets, and swipe-left to delete.
+    func modalListRow(onDelete: @escaping () -> Void) -> some View {
+        self
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(EdgeInsets())
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                Button(role: .destructive, action: onDelete) {
+                    Label("Delete", systemImage: "trash")
+                        .labelStyle(.iconOnly)
+                }
+            }
+            .background(Color.clear)
     }
 }
 
@@ -203,34 +190,16 @@ struct IncomeDraft {
 struct PaymentFormFields: View {
     @Binding var draft: PaymentDraft
     let categories: [String]
+    @Binding var showDatePicker: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            LabeledField(label: "Name") {
-                PlainTextField(placeholder: draft.isRecurring ? "e.g. Rent" : "e.g. Flights",
-                               text: $draft.name)
-            }
-            LabeledField(label: "Amount") {
-                CurrencyEntryField(value: $draft.amount)
-            }
-            FBToggleRow(label: "Recurring", isOn: $draft.isRecurring)
-            LabeledField(label: draft.isRecurring ? "Next payment" : "Date") {
-                VStack(alignment: .leading, spacing: 6) {
-                    FBDateField(date: $draft.date)
-                    if draft.isRecurring {
-                        Text("Repeats monthly on this day.")
-                            .font(.fbBody(12))
-                            .foregroundStyle(Color.fbSoftText)
-                    }
-                }
-            }
-            LabeledField(label: "Category") {
-                Picker("", selection: $draft.category) {
-                    ForEach(categories, id: \.self) { Text($0).tag($0) }
-                }
-                .pickerStyle(.menu)
-                .tint(Color.fbInk)
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            PlainTextField(placeholder: "Name", text: $draft.name)
+            CurrencyEntryField(value: $draft.amount)
+            FBMenuField(label: "Category", selection: $draft.category,
+                        options: categories)
+            DateRecurringGroupField(date: $draft.date, isRecurring: $draft.isRecurring,
+                                    showDatePicker: $showDatePicker)
         }
     }
 }
@@ -238,35 +207,74 @@ struct PaymentFormFields: View {
 struct IncomeFormFields: View {
     @Binding var draft: IncomeDraft
     let categories: [String]
+    @Binding var showDatePicker: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            LabeledField(label: "Name") {
-                PlainTextField(placeholder: draft.isRecurring ? "e.g. Salary" : "e.g. Refund",
-                               text: $draft.name)
-            }
-            LabeledField(label: "Amount") {
-                CurrencyEntryField(value: $draft.amount)
-            }
-            FBToggleRow(label: "Recurring", isOn: $draft.isRecurring)
-            LabeledField(label: draft.isRecurring ? "Next payment" : "Date") {
-                VStack(alignment: .leading, spacing: 6) {
-                    FBDateField(date: $draft.date)
-                    if draft.isRecurring {
-                        Text("Repeats monthly on this day.")
-                            .font(.fbBody(12))
-                            .foregroundStyle(Color.fbSoftText)
-                    }
-                }
-            }
-            LabeledField(label: "Category") {
-                Picker("", selection: $draft.category) {
-                    ForEach(categories, id: \.self) { Text($0).tag($0) }
-                }
-                .pickerStyle(.menu)
-                .tint(Color.fbInk)
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            PlainTextField(placeholder: "Name", text: $draft.name)
+            CurrencyEntryField(value: $draft.amount)
+            FBMenuField(label: "Category", selection: $draft.category,
+                        options: categories)
+            DateRecurringGroupField(date: $draft.date, isRecurring: $draft.isRecurring,
+                                    showDatePicker: $showDatePicker)
         }
+    }
+}
+
+/// Date picker row and recurring toggle sharing one rounded-rect container.
+struct DateRecurringGroupField: View {
+    @Binding var date: Date
+    @Binding var isRecurring: Bool
+    @Binding var showDatePicker: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Date row — mirrors FBFieldShell layout without its own background.
+            Button {
+                fbDismissKeyboard()
+                showDatePicker = true
+            } label: {
+                HStack(spacing: 10) {
+                    ZStack(alignment: .leading) {
+                        Text("Date")
+                            .font(.fbBody(16))
+                            .foregroundStyle(Color.fbSoftText)
+                            .scaleEffect(0.74, anchor: .leading)
+                            .offset(y: -12)
+                        Text(date.formatted(.dateTime.day().month(.wide).year()))
+                            .font(.fbBody(16, weight: .medium))
+                            .foregroundStyle(Color.fbInk)
+                            .offset(y: 9)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "calendar")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(showDatePicker ? Color.fbInk : Color.fbSoftText)
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 60)
+            }
+            .buttonStyle(.pressable)
+
+            Rectangle()
+                .fill(Color.fbHairline)
+                .frame(height: 1)
+                .padding(.horizontal, 16)
+
+            // Recurring toggle — label uses soft text colour, not full white.
+            Toggle(isOn: $isRecurring) {
+                Text("Recurring")
+                    .font(.fbBody(15, weight: .medium))
+                    .foregroundStyle(Color.fbSoftText)
+            }
+            .toggleStyle(FBSwitchStyle())
+            .padding(.horizontal, 16)
+            .frame(height: 60)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.fbInk.opacity(0.05))
+        )
     }
 }
 
@@ -283,6 +291,7 @@ struct QuickAddOverlay: View {
     @State private var kind = 0
     @State private var paymentDraft: PaymentDraft
     @State private var incomeDraft: IncomeDraft
+    @State private var showDatePicker = false
 
     init(store: FinanceBuddyStore, onClose: @escaping () -> Void) {
         self.store = store
@@ -297,34 +306,48 @@ struct QuickAddOverlay: View {
 
     var body: some View {
         ZStack {
-            ModalBackdrop(onTap: onClose)
-            ModalCard {
+            ModalBackdrop {
+                if showDatePicker { showDatePicker = false } else { onClose() }
+            }
+            ModalCard(depth: showDatePicker ? 1 : 0) {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("Add")
-                        .font(.fbHeader(20))
-                        .tracking(-0.3)
-                        .foregroundStyle(Color.fbInk)
+                    ModalHeader(title: "Add", onClose: onClose)
 
                     FBSegmentedControl(options: ["Expense", "Income"], selection: $kind)
 
                     if kind == 0 {
                         PaymentFormFields(draft: $paymentDraft,
-                                          categories: store.finances.paymentCategories)
+                                          categories: store.finances.paymentCategories,
+                                          showDatePicker: $showDatePicker)
                     } else {
                         IncomeFormFields(draft: $incomeDraft,
-                                         categories: store.finances.incomeCategories)
+                                         categories: store.finances.incomeCategories,
+                                         showDatePicker: $showDatePicker)
                     }
 
-                    ModalActionButtons(primaryLabel: "Add",
-                                       primaryEnabled: canSave,
-                                       onPrimary: save,
-                                       onSecondary: onClose)
+                    FBPrimaryButton(label: "Add", enabled: canSave, action: save)
                 }
             }
             .transition(.fbModalPush)
+
+            if showDatePicker {
+                FBDatePickerCard(label: "Date", date: currentDateBinding) {
+                    showDatePicker = false
+                }
+                .transition(.fbModalPush)
+                .zIndex(1)
+            }
         }
         .transition(.opacity)
         .animation(.fbModal, value: kind)
+        .animation(.fbModal, value: showDatePicker)
+    }
+
+    private var currentDateBinding: Binding<Date> {
+        Binding(
+            get: { kind == 0 ? paymentDraft.date : incomeDraft.date },
+            set: { if kind == 0 { paymentDraft.date = $0 } else { incomeDraft.date = $0 } }
+        )
     }
 
     private var canSave: Bool {
@@ -357,6 +380,8 @@ struct QuickAddOverlay: View {
 
 // MARK: - Small form building blocks
 
+/// External label + content — kept for the sign-in screen; modal forms
+/// use the floating-label filled fields below instead.
 struct LabeledField<Content: View>: View {
     let label: String
     @ViewBuilder var content: Content
@@ -370,195 +395,362 @@ struct LabeledField<Content: View>: View {
     }
 }
 
+/// The filled field per the reference: a soft rounded well whose label
+/// sits as the placeholder, then floats into a tiny caption once the
+/// field is focused or holds a value. Fixed height — nothing reflows.
+struct FBFieldShell<Content: View, Trailing: View>: View {
+    let label: String
+    let floating: Bool
+    @ViewBuilder var content: Content
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack(alignment: .leading) {
+                Text(label)
+                    .font(.fbBody(16))
+                    .foregroundStyle(Color.fbSoftText)
+                    .scaleEffect(floating ? 0.74 : 1, anchor: .leading)
+                    .offset(y: floating ? -12 : 0)
+                content
+                    .offset(y: floating ? 9 : 0)
+                    .opacity(floating ? 1 : 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            trailing
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 60)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.fbInk.opacity(0.05))
+        )
+        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: floating)
+    }
+}
+
+/// The Recurring switch in the same filled well as every other field.
+struct FBToggleField: View {
+    let label: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        FBToggleRow(label: label, isOn: $isOn)
+            .padding(.horizontal, 16)
+            .frame(height: 60)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.fbInk.opacity(0.05))
+            )
+    }
+}
+
 struct PlainTextField: View {
+    /// Doubles as the floating label.
     let placeholder: String
     @Binding var text: String
+    @FocusState private var focused: Bool
+
     var body: some View {
-        TextField(placeholder, text: $text)
-            .textFieldStyle(.plain)
-            .font(.fbBody(17, weight: .medium))
-            .foregroundStyle(Color.fbInk)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.fbBackground)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.fbHairline, lineWidth: 1)
-            )
+        FBFieldShell(label: placeholder, floating: focused || !text.isEmpty) {
+            TextField("", text: $text)
+                .textFieldStyle(.plain)
+                .font(.fbBody(16, weight: .medium))
+                .foregroundStyle(Color.fbInk)
+                .focused($focused)
+        } trailing: {
+            EmptyView()
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
     }
 }
 
-// MARK: - Amount keyboard arithmetic
+// MARK: - Amount fields (expression editing)
 
-/// Calculator ops riding on the decimal keyboard itself (an accessory row,
-/// not chrome in the form): +, −, ×, ÷ chain like a pocket calculator and
-/// = resolves into the field.
-private struct AmountKeyboardOps: ViewModifier {
+/// The shared amount editor. The raw expression shows in the field while
+/// typing (12 + 5 × 2); the bound value tracks its live result; = or
+/// leaving the field settles the text to the result. Ops are separate
+/// pill ornaments riding above the decimal keyboard.
+private struct AmountExpressionField: View {
+    let label: String
     @Binding var value: Double?
-    @FocusState private var focused: Bool
-    @State private var pending: Double?
-    @State private var pendingOp: String?
 
-    func body(content: Content) -> some View {
-        content
-            .focused($focused)
-            .toolbar {
-                ToolbarItemGroup(placement: .keyboard) {
-                    if focused {
-                        ForEach(["+", "−", "×", "÷"], id: \.self) { op in
-                            Button(op) { apply(op) }
-                                .font(.fbNumber(19, weight: .semibold))
-                        }
-                        Spacer()
-                        Button("=") { resolve() }
-                            .font(.fbNumber(19, weight: .bold))
+    @State private var text: String
+    @FocusState private var focused: Bool
+
+    init(label: String, value: Binding<Double?>) {
+        self.label = label
+        _value = value
+        _text = State(initialValue: value.wrappedValue.map(Money.editString) ?? "")
+    }
+
+    private var floating: Bool { focused || !text.isEmpty }
+
+    // True when the expression contains an arithmetic operator.
+    private var hasOperator: Bool {
+        text.contains(where: { "+−×÷".contains($0) })
+    }
+
+    // True when both operands are present (last char is a digit/dot, not an op).
+    private var expressionIsComplete: Bool {
+        guard let last = text.last else { return false }
+        return "0123456789.".contains(last) && hasOperator
+    }
+
+    var body: some View {
+        FBFieldShell(label: label, floating: floating) {
+            ZStack(alignment: .leading) {
+                // Input layer — text turns invisible during expression mode so
+                // only the cursor shows, anchoring the styled overlay below.
+                HStack(spacing: 6) {
+                    if !hasOperator {
+                        Text(Money.currencySymbol)
+                            .font(.fbNumber(16, weight: .semibold))
+                            .foregroundStyle(Color.fbSoftText)
                     }
+                    TextField("", text: $text)
+                        .textFieldStyle(.plain)
+                        .font(.fbNumber(16, weight: .semibold))
+                        .foregroundStyle(hasOperator ? Color.clear : Color.fbInk)
+                        .decimalKeyboard()
+                        .focused($focused)
+                }
+                // Styled expression overlay (only while an operator is present).
+                if hasOperator {
+                    expressionOverlay
                 }
             }
-            .onChange(of: focused) {
-                // Leaving the field settles any half-finished sum.
-                if !focused { resolve() }
-            }
-    }
-
-    private func apply(_ op: String) {
-        resolve() // chain: 12 + 5 × … resolves 17 before storing ×
-        pending = value
-        pendingOp = op
-        value = nil
-    }
-
-    private func resolve() {
-        guard let a = pending, let op = pendingOp else { return }
-        let b = value ?? 0
-        switch op {
-        case "+": value = a + b
-        case "−": value = a - b
-        case "×": value = a * b
-        case "÷": value = b == 0 ? a : a / b
-        default:  break
+        } trailing: {
+            EmptyView()
         }
-        pending = nil
-        pendingOp = nil
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
+        .toolbar {
+            // Keys appear immediately on focus so the bar height is stable from
+            // the moment the keyboard rises — no second layout jump on first digit.
+            ToolbarItemGroup(placement: .keyboard) {
+                if focused {
+                    opKey("+")
+                        .disabled(text.isEmpty).opacity(text.isEmpty ? 0.35 : 1)
+                    Spacer()
+                    opKey("−")
+                        .disabled(text.isEmpty).opacity(text.isEmpty ? 0.35 : 1)
+                    Spacer()
+                    opKey("×")
+                        .disabled(text.isEmpty).opacity(text.isEmpty ? 0.35 : 1)
+                    Spacer()
+                    opKey("÷")
+                        .disabled(text.isEmpty).opacity(text.isEmpty ? 0.35 : 1)
+                    Spacer()
+                    opKey("=")
+                        .foregroundStyle(Color.fbOnAccent)
+                        .backgroundStyle(Color.fbInk)
+                        .disabled(text.isEmpty).opacity(text.isEmpty ? 0.35 : 1)
+                }
+            }
+        }
+        .onChange(of: text) {
+            value = AmountExpressionField.evaluate(text)
+        }
+        .onChange(of: focused) {
+            if !focused { settle() }
+        }
     }
-}
 
-extension View {
-    /// Adds the calculator row to an amount field's keyboard.
-    func amountKeyboardOps(value: Binding<Double?>) -> some View {
-        modifier(AmountKeyboardOps(value: value))
+    // "10+" → raw text in white
+    // "10+10" → "10+10=" in soft grey + "£20" in white
+    @ViewBuilder
+    private var expressionOverlay: some View {
+        if expressionIsComplete, let result = AmountExpressionField.evaluate(text) {
+            let expr = Text(text + "=").foregroundStyle(Color.fbSoftText)
+            let res  = Text(Money.currencySymbol + Money.editString(result)).foregroundStyle(Color.fbInk)
+            Text("\(expr)\(res)")
+                .font(.fbNumber(16, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .allowsHitTesting(false)
+        } else {
+            Text(text)
+                .font(.fbNumber(16, weight: .semibold))
+                .foregroundStyle(Color.fbInk)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func opKey(_ op: String) -> some View {
+        Button {
+            op == "=" ? settle() : insert(op)
+        } label: {
+            Text(op)
+                .font(.fbNumber(18, weight: .semibold))
+                .foregroundStyle(Color.fbInk)
+        }
+        .buttonStyle(.pressable)
+    }
+
+    private func insert(_ op: String) {
+        var trimmed = text
+        while let last = trimmed.last, last == " " || "+−×÷".contains(last) {
+            trimmed.removeLast()
+        }
+        guard !trimmed.isEmpty else { return }
+        text = trimmed + "\(op)"
+    }
+
+    private func settle() {
+        guard let result = AmountExpressionField.evaluate(text) else { return }
+        text = Money.editString(result)
+        value = result
+    }
+
+    /// Left-to-right tokens, × ÷ before + −. Incomplete tails ("12 +")
+    /// evaluate to what's complete so the Save button tracks live.
+    static func evaluate(_ raw: String) -> Double? {
+        let cleaned = raw.replacingOccurrences(of: ",", with: ".")
+            .replacingOccurrences(of: " ", with: "")
+        guard !cleaned.isEmpty else { return nil }
+
+        var numbers: [Double] = []
+        var ops: [Character] = []
+        var current = ""
+        for ch in cleaned {
+            if "0123456789.".contains(ch) {
+                current.append(ch)
+            } else if "+−×÷".contains(ch) {
+                guard let n = Double(current) else { return numbers.first }
+                numbers.append(n)
+                ops.append(ch)
+                current = ""
+            } else {
+                return nil
+            }
+        }
+        if !current.isEmpty {
+            guard let n = Double(current) else { return numbers.first }
+            numbers.append(n)
+        }
+        while ops.count >= numbers.count, !ops.isEmpty { ops.removeLast() }
+        guard numbers.count == ops.count + 1 else { return numbers.first }
+
+        var i = 0
+        while i < ops.count {
+            if ops[i] == "×" || ops[i] == "÷" {
+                let b = numbers[i + 1]
+                numbers[i] = ops[i] == "×" ? numbers[i] * b
+                                           : (b == 0 ? numbers[i] : numbers[i] / b)
+                numbers.remove(at: i + 1)
+                ops.remove(at: i)
+            } else {
+                i += 1
+            }
+        }
+        var result = numbers[0]
+        for (k, op) in ops.enumerated() {
+            result = op == "+" ? result + numbers[k + 1] : result - numbers[k + 1]
+        }
+        return result
     }
 }
 
 /// A numeric field showing the currency symbol, for a non-optional value.
 struct CurrencyField: View {
+    var label = "Amount"
     @Binding var value: Double
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(Money.currencySymbol)
-                .font(.fbNumber(22, weight: .semibold))
-                .foregroundStyle(Color.fbSoftText)
-            TextField("0", value: $value, format: .number.precision(.fractionLength(0...2)))
-                .textFieldStyle(.plain)
-                .font(.fbNumber(22, weight: .semibold))
-                .foregroundStyle(Color.fbInk)
-                .decimalKeyboard()
-                .amountKeyboardOps(value: Binding(get: { value },
-                                                  set: { value = $0 ?? 0 }))
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.fbBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.fbHairline, lineWidth: 1)
-        )
+        AmountExpressionField(label: label,
+                              value: Binding(get: { value },
+                                             set: { value = $0 ?? 0 }))
     }
 }
 
 /// Like CurrencyField but for an optional value (empty until typed).
 struct CurrencyEntryField: View {
+    var label = "Amount"
     @Binding var value: Double?
     var body: some View {
-        HStack(spacing: 6) {
-            Text(Money.currencySymbol)
-                .font(.fbNumber(20, weight: .semibold))
-                .foregroundStyle(Color.fbSoftText)
-            TextField("0", value: $value, format: .number.precision(.fractionLength(0...2)))
-                .textFieldStyle(.plain)
-                .font(.fbNumber(20, weight: .semibold))
-                .foregroundStyle(Color.fbInk)
-                .decimalKeyboard()
-                .amountKeyboardOps(value: $value)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.fbBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.fbHairline, lineWidth: 1)
-        )
+        AmountExpressionField(label: label, value: $value)
     }
 }
 
-/// A date field that always reads "30 July 2026" — never the compact
-/// picker's "30/07/2026". Tapping it unfolds the calendar inside the
-/// card; picking a day folds it back.
+/// A date field in the same filled style — label floats above the
+/// "30 July 2026" value. Callers must manage `showDatePicker` state and
+/// render `FBDatePickerCard` at the enclosing ZStack level so it pushes
+/// the underlying card back along the z-axis.
 struct FBDateField: View {
+    var label = "Date"
     @Binding var date: Date
-    @State private var expanded = false
+    @Binding var showDatePicker: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            Button {
-                withAnimation(.fbModal) { expanded.toggle() }
-            } label: {
-                HStack {
-                    Text(date.formatted(.dateTime.day().month(.wide).year()))
-                        .font(.fbBody(17, weight: .medium))
-                        .foregroundStyle(Color.fbInk)
-                    Spacer()
-                    Image(systemName: "calendar")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(expanded ? Color.fbInk : Color.fbSoftText)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .contentShape(Rectangle())
+        Button {
+            fbDismissKeyboard()
+            showDatePicker = true
+        } label: {
+            FBFieldShell(label: label, floating: true) {
+                Text(date.formatted(.dateTime.day().month(.wide).year()))
+                    .font(.fbBody(16, weight: .medium))
+                    .foregroundStyle(Color.fbInk)
+            } trailing: {
+                Image(systemName: "calendar")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(showDatePicker ? Color.fbInk : Color.fbSoftText)
             }
-            .buttonStyle(.pressable)
+        }
+        .buttonStyle(.pressable)
+    }
+}
 
-            if expanded {
+/// The date picker as a floating modal card — rendered at the parent
+/// ZStack level so it can push the underlying form card back along the
+/// z-axis with the shared fbModalPush transition. Apply `.transition(.fbModalPush)`
+/// and `.zIndex(n)` at the call site.
+struct FBDatePickerCard: View {
+    let label: String
+    @Binding var date: Date
+    let onClose: () -> Void
+
+    var body: some View {
+        ModalCard {
+            VStack(alignment: .leading, spacing: 10) {
+                ModalHeader(title: label, onClose: onClose)
                 DatePicker("", selection: $date, displayedComponents: .date)
                     .datePickerStyle(.graphical)
                     .labelsHidden()
                     .tint(Color.fbPositive)
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 6)
-                    .transition(.opacity)
             }
         }
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.fbBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.fbHairline, lineWidth: 1)
-        )
         .onChange(of: date) {
-            withAnimation(.fbModal) { expanded = false }
+            onClose()
         }
+    }
+}
+
+/// The dropdown in the same filled style: tiny label, current value, and
+/// a chevron; options come from a Menu.
+struct FBMenuField: View {
+    let label: String
+    @Binding var selection: String
+    let options: [String]
+
+    var body: some View {
+        Menu {
+            ForEach(options, id: \.self) { option in
+                Button(option) { selection = option }
+            }
+        } label: {
+            FBFieldShell(label: label, floating: true) {
+                Text(selection)
+                    .font(.fbBody(16, weight: .medium))
+                    .foregroundStyle(Color.fbInk)
+            } trailing: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.fbSoftText)
+            }
+        }
+        .buttonStyle(.pressable)
     }
 }
 
@@ -568,5 +760,17 @@ extension Money {
         f.numberStyle = .currency
         f.currencyCode = currencyCode
         return f.currencySymbol ?? "£"
+    }
+
+    /// Bare editable number — no grouping or symbol, trailing zeros
+    /// trimmed ("2140", "12.5").
+    static func editString(_ value: Double) -> String {
+        if value.rounded() == value, abs(value) < 1e15 {
+            return String(Int(value))
+        }
+        var s = String(format: "%.2f", value)
+        while s.hasSuffix("0") { s.removeLast() }
+        if s.hasSuffix(".") { s.removeLast() }
+        return s
     }
 }

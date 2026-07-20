@@ -21,11 +21,12 @@ struct ProfileView: View {
 
     var body: some View {
         ZStack {
-            FBBackground()
-
+            // Transparent — the shared background lives at the root. The
+            // title bar lives on the pager in ContentView: only the
+            // outermost scroll view renders edge effects, so a page-owned
+            // safeAreaBar would never get the blur pocket.
             ScrollView {
                 VStack(spacing: 16) {
-                    header
                     identity
                     appearanceCard
                     categoriesCard
@@ -37,17 +38,6 @@ struct ProfileView: View {
             }
             .scrollEdgeEffectStyle(.soft, for: .vertical)
         }
-    }
-
-    private var header: some View {
-        HStack {
-            Text("Profile")
-                .font(.fbHeader(28))
-                .tracking(-0.5)
-                .foregroundStyle(Color.fbInk)
-            Spacer()
-        }
-        .padding(.top, 4)
     }
 
     // MARK: Identity — no card, just the person
@@ -183,26 +173,20 @@ struct SignOutConfirmOverlay: View {
 
             ModalCard {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Sign out?")
-                        .font(.fbHeader(20))
-                        .tracking(-0.3)
-                        .foregroundStyle(Color.fbInk)
+                    ModalHeader(title: "Sign out?", onClose: onClose)
                     Text("Your data stays safe in your account. You'll need to sign in again to see it.")
                         .font(.fbBody(15))
                         .foregroundStyle(Color.fbSoftText)
 
-                    VStack(spacing: 10) {
-                        FBPrimaryButton(label: isSigningOut ? "Signing out…" : "Sign out",
-                                        enabled: !isSigningOut,
-                                        destructive: true) {
-                            Task {
-                                isSigningOut = true
-                                await onSignOut()
-                                isSigningOut = false
-                                onClose()
-                            }
+                    FBPrimaryButton(label: isSigningOut ? "Signing out…" : "Sign out",
+                                    enabled: !isSigningOut,
+                                    destructive: true) {
+                        Task {
+                            isSigningOut = true
+                            await onSignOut()
+                            isSigningOut = false
+                            onClose()
                         }
-                        FBSecondaryButton(label: "Cancel", action: onClose)
                     }
                 }
             }
@@ -255,28 +239,31 @@ struct ManageCategoriesOverlay: View {
 
     private var list: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(forIncome ? "Income categories" : "Payment categories")
-                .font(.fbHeader(20))
-                .tracking(-0.3)
-                .foregroundStyle(Color.fbInk)
+            ModalHeader(title: forIncome ? "Income categories" : "Payment categories",
+                        onClose: onClose)
 
-            ScrollView {
-                VStack(spacing: 2) {
-                    ForEach(categories, id: \.self) { category in
-                        ModalItemRow(name: category,
-                                     detail: "",
-                                     amount: nil,
-                                     onEdit: {
-                                         draft = Draft(original: category, name: category)
-                                         showForm = true
-                                     },
-                                     onDelete: {
-                                         store.removeCategory(category, forIncome: forIncome)
-                                     })
-                    }
+            // Long-press-drag a row to reorder; swipe left to delete;
+            // tap to rename.
+            List {
+                ForEach(categories, id: \.self) { category in
+                    ModalItemRow(name: category, detail: "",
+                                 onEdit: {
+                                     draft = Draft(original: category, name: category)
+                                     showForm = true
+                                 })
+                        .modalListRow {
+                            store.removeCategory(category, forIncome: forIncome)
+                        }
+                }
+                .onMove { offsets, destination in
+                    store.moveCategories(fromOffsets: offsets, toOffset: destination,
+                                         forIncome: forIncome)
                 }
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .frame(maxHeight: 280)
+            .scrollEdgeEffectStyle(.soft, for: .vertical)
 
             if categories.count == 1 {
                 Text("Items using a deleted category move to the first one in the list.")
@@ -284,32 +271,23 @@ struct ManageCategoriesOverlay: View {
                     .foregroundStyle(Color.fbSoftText)
             }
 
-            VStack(spacing: 10) {
-                FBPrimaryButton(label: "Add") {
-                    draft = Draft()
-                    showForm = true
-                }
-                FBSecondaryButton(label: "Done", action: onClose)
+            FBPrimaryButton(label: "Add") {
+                draft = Draft()
+                showForm = true
             }
         }
     }
 
     private var form: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text(draft.original == nil ? "New category" : "Rename category")
-                .font(.fbHeader(20))
-                .tracking(-0.3)
-                .foregroundStyle(Color.fbInk)
-
-            LabeledField(label: "Name") {
-                PlainTextField(placeholder: forIncome ? "e.g. Freelance" : "e.g. Groceries",
-                               text: $draft.name)
+            ModalHeader(title: draft.original == nil ? "New category" : "Rename category") {
+                showForm = false
             }
 
-            ModalActionButtons(primaryLabel: "Save",
-                               primaryEnabled: draft.isValid,
-                               onPrimary: saveDraft,
-                               onSecondary: { showForm = false })
+            PlainTextField(placeholder: "Name", text: $draft.name)
+
+            FBPrimaryButton(label: "Save", enabled: draft.isValid,
+                            action: saveDraft)
         }
     }
 
@@ -329,6 +307,7 @@ struct ManageCategoriesOverlay: View {
     return PreviewModalHost(store: store) { present in
         ProfileView(store: store, email: "rxzirr@gmail.com",
                     canSignOut: true, present: present)
+            .safeAreaBar(edge: .top) { PageTitleBar(title: "Profile") }
     }
 }
 
