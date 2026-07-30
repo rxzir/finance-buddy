@@ -25,7 +25,7 @@ enum LocalReasoner {
         let notes: String
     }
 
-    private static let profiles: [Profile] = [
+    private nonisolated static let profiles: [Profile] = [
         Profile(keywords: ["car", "vehicle", "lease", "motor", "automobile"],
                 label: "a car",
                 hiddenMultiplier: 0.6,
@@ -48,7 +48,7 @@ enum LocalReasoner {
                 notes: "food, transfers, activities and spending money"),
     ]
 
-    static func answer(to question: String, finances: Finances) -> String {
+    nonisolated static func answer(to question: String, finances: Finances) -> String {
         let lower = question.lowercased()
         let amount = parseAmount(from: lower)
         let isMonthly = lower.contains("month") || lower.contains("/mo") || lower.contains("a month")
@@ -112,7 +112,7 @@ enum LocalReasoner {
 
     /// Pulls the first monetary amount out of a question. Handles "£380",
     /// "380", "1,200", "1.2k".
-    private static func parseAmount(from text: String) -> Double? {
+    private nonisolated static func parseAmount(from text: String) -> Double? {
         // Match numbers with optional thousands separators / decimals / k suffix.
         let pattern = #"£?\s?([0-9][0-9,]*(?:\.[0-9]+)?)(k)?"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }

@@ -14,10 +14,13 @@ enum ModelAvailability: Equatable, Sendable {
     case ready
     case unavailable(reason: String)
 
-    var isReady: Bool { self == .ready }
+    nonisolated var isReady: Bool {
+        if case .ready = self { return true }
+        return false
+    }
 
     /// Snapshot of the system model's availability right now.
-    static func check(_ model: SystemLanguageModel = .default) -> ModelAvailability {
+    nonisolated static func check(_ model: SystemLanguageModel = .default) -> ModelAvailability {
         switch model.availability {
         case .available:
             return .ready

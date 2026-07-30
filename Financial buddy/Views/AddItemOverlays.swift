@@ -18,15 +18,13 @@ import SwiftUI
 
 // MARK: - Modal scaffold
 
-/// Soft glass dim behind every modal: a light blur with only a whisper of
-/// darkening — the screen behind stays readable, just recessed.
+/// Plain dim behind every modal — no material blur here; the depth blur
+/// is applied directly to the background content in MainTabShell.
 struct ModalBackdrop: View {
     let onTap: () -> Void
     var body: some View {
-        Rectangle()
-            .fill(.ultraThinMaterial)
+        Color.black.opacity(0.3)
             .ignoresSafeArea()
-            .overlay(Color.black.opacity(0.18).ignoresSafeArea())
             .onTapGesture(perform: onTap)
     }
 }
@@ -41,9 +39,9 @@ struct ModalCard<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 60)
-            Card(cornerRadius: 22, opaque: true) { content }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+            Card(cornerRadius: 48, opaque: true) { content }
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
                 // Tapping any non-interactive part of the card closes the
                 // keyboard (the decimal pad has no return key). Controls
                 // inside still win the tap.
@@ -55,6 +53,7 @@ struct ModalCard<Content: View>: View {
         .blur(radius: CGFloat(depth) * 1.5)
         .opacity(depth == 0 ? 1 : 0.55)
         .allowsHitTesting(depth == 0)
+        .ignoresSafeArea()
     }
 }
 
@@ -718,7 +717,7 @@ struct FBDatePickerCard: View {
                 DatePicker("", selection: $date, displayedComponents: .date)
                     .datePickerStyle(.graphical)
                     .labelsHidden()
-                    .tint(Color.fbPositive)
+                    .tint(Color.fbAccent)
             }
         }
         .onChange(of: date) {
@@ -755,7 +754,7 @@ struct FBMenuField: View {
 }
 
 extension Money {
-    static var currencySymbol: String {
+    nonisolated static var currencySymbol: String {
         let f = NumberFormatter()
         f.numberStyle = .currency
         f.currencyCode = currencyCode
@@ -764,7 +763,7 @@ extension Money {
 
     /// Bare editable number — no grouping or symbol, trailing zeros
     /// trimmed ("2140", "12.5").
-    static func editString(_ value: Double) -> String {
+    nonisolated static func editString(_ value: Double) -> String {
         if value.rounded() == value, abs(value) < 1e15 {
             return String(Int(value))
         }

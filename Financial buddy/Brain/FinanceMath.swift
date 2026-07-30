@@ -18,7 +18,7 @@ import Foundation
 enum AffordabilityVerdict: String, Equatable, Sendable {
     case comfortable, tight, unaffordable
 
-    static func judge(headroom: Double, newMonthlyCost: Double) -> AffordabilityVerdict {
+    nonisolated static func judge(headroom: Double, newMonthlyCost: Double) -> AffordabilityVerdict {
         let remaining = headroom - newMonthlyCost
         if remaining < 0 { return .unaffordable }
         if remaining < headroom * 0.25 { return .tight }
@@ -40,7 +40,7 @@ extension Finances {
 
     /// Free money over the next `days` days: balance, plus income landing
     /// inside the window, minus everything due inside it.
-    func capacity(overDays days: Int,
+    nonisolated func capacity(overDays days: Int,
                   asOf today: Date = Date(),
                   calendar: Calendar = .current) -> CapacityBreakdown {
         let start = calendar.startOfDay(for: today)
@@ -70,7 +70,7 @@ extension Finances {
     }
 
     /// Monthly headroom left once a new recurring cost is added.
-    func headroomAfterAdding(monthly amount: Double) -> Double {
+    nonisolated func headroomAfterAdding(monthly amount: Double) -> Double {
         monthlyHeadroom - amount
     }
 }

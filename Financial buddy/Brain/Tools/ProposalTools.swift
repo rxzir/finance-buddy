@@ -70,6 +70,29 @@ struct ProposeIncomeTool: Tool {
     }
 }
 
+// MARK: - Balance update
+
+struct ProposeBalanceUpdateTool: Tool {
+    let name = "proposeBalanceUpdate"
+    let description = "Stage a correction to the user's current account balance, for their confirmation. Writes nothing."
+
+    let context: BrainContext
+
+    @Generable
+    struct Arguments {
+        @Guide(description: "The new account balance to set")
+        var newBalance: Double
+    }
+
+    func call(arguments: Arguments) async throws -> String {
+        let draft = ProposedAction.BalanceDraft(
+            newBalance: arguments.newBalance,
+            confidence: ProposedAction.confidence(amount: arguments.newBalance))
+        context.stage(.updateBalance(draft))
+        return "Staged (not saved): set balance to \(Money.string(arguments.newBalance)). Ask the user to confirm before it is recorded; never say it is done."
+    }
+}
+
 // MARK: - Recurring commitment
 
 struct ProposeRecurringTool: Tool {

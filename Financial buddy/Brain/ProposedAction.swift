@@ -17,6 +17,7 @@ enum ProposedAction: Identifiable, Equatable, Sendable {
     case logExpense(ExpenseDraft)
     case logIncome(IncomeDraft)
     case addRecurring(RecurringDraft)
+    case updateBalance(BalanceDraft)
 
     /// A one-off expense the user reported having spent.
     struct ExpenseDraft: Equatable, Sendable {
@@ -27,7 +28,7 @@ enum ProposedAction: Identifiable, Equatable, Sendable {
         /// 0...1 — how sure we are the fields were heard/parsed right.
         var confidence: Double
 
-        init(id: UUID = UUID(), name: String, amount: Double, date: Date, confidence: Double) {
+        nonisolated init(id: UUID = UUID(), name: String, amount: Double, date: Date, confidence: Double) {
             self.id = id
             self.name = name
             self.amount = amount
@@ -44,7 +45,7 @@ enum ProposedAction: Identifiable, Equatable, Sendable {
         var date: Date
         var confidence: Double
 
-        init(id: UUID = UUID(), name: String, amount: Double, date: Date, confidence: Double) {
+        nonisolated init(id: UUID = UUID(), name: String, amount: Double, date: Date, confidence: Double) {
             self.id = id
             self.name = name
             self.amount = amount
@@ -62,7 +63,7 @@ enum ProposedAction: Identifiable, Equatable, Sendable {
         var dueDay: Int
         var confidence: Double
 
-        init(id: UUID = UUID(), name: String, amount: Double, dueDay: Int, confidence: Double) {
+        nonisolated init(id: UUID = UUID(), name: String, amount: Double, dueDay: Int, confidence: Double) {
             self.id = id
             self.name = name
             self.amount = amount
@@ -71,25 +72,40 @@ enum ProposedAction: Identifiable, Equatable, Sendable {
         }
     }
 
-    var id: UUID {
+    /// A correction to the current account balance.
+    struct BalanceDraft: Equatable, Sendable {
+        let id: UUID
+        var newBalance: Double
+        var confidence: Double
+
+        nonisolated init(id: UUID = UUID(), newBalance: Double, confidence: Double) {
+            self.id = id
+            self.newBalance = newBalance
+            self.confidence = confidence
+        }
+    }
+
+    nonisolated var id: UUID {
         switch self {
         case .logExpense(let draft): return draft.id
         case .logIncome(let draft): return draft.id
         case .addRecurring(let draft): return draft.id
+        case .updateBalance(let draft): return draft.id
         }
     }
 
-    var confidence: Double {
+    nonisolated var confidence: Double {
         switch self {
         case .logExpense(let draft): return draft.confidence
         case .logIncome(let draft): return draft.confidence
         case .addRecurring(let draft): return draft.confidence
+        case .updateBalance(let draft): return draft.confidence
         }
     }
 
     /// One line the UI (or the assistant's prose) can use when asking the
     /// user to confirm.
-    var summary: String {
+    nonisolated var summary: String {
         switch self {
         case .logExpense(let draft):
             return "Log \(Money.string(draft.amount)) spent on \(draft.name) (\(draft.date.formatted(date: .abbreviated, time: .omitted)))"
@@ -97,6 +113,8 @@ enum ProposedAction: Identifiable, Equatable, Sendable {
             return "Log \(Money.string(draft.amount)) in from \(draft.name) (\(draft.date.formatted(date: .abbreviated, time: .omitted)))"
         case .addRecurring(let draft):
             return "Add \(draft.name) at \(Money.string(draft.amount))/month, due on day \(draft.dueDay)"
+        case .updateBalance(let draft):
+            return "Set balance to \(Money.string(draft.newBalance))"
         }
     }
 }
@@ -108,7 +126,7 @@ extension ProposedAction {
     /// Parses a spoken/typed date like "today", "yesterday", "tomorrow" or
     /// "2026-07-18". Falls back to today, with `parsed: false` so the
     /// confidence score can reflect the guess.
-    static func parseDate(_ text: String,
+    nonisolated static func parseDate(_ text: String,
                           asOf today: Date = Date(),
                           calendar: Calendar = .current) -> (date: Date, parsed: Bool) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -144,7 +162,7 @@ extension ProposedAction {
 
     /// Whole amounts whose spoken forms are easily misheard by dictation
     /// ("thirteen" vs "thirty", "fifteen" vs "fifty", …).
-    static func isDictationAmbiguous(_ amount: Double) -> Bool {
+    nonisolated static func isDictationAmbiguous(_ amount: Double) -> Bool {
         guard amount >= 0, amount < 1_000_000_000, amount == amount.rounded() else { return false }
         let confusables: Set<Int> = [13, 14, 15, 16, 17, 18, 19, 30, 40, 50, 60, 70, 80, 90]
         return confusables.contains(Int(amount))
@@ -152,7 +170,7 @@ extension ProposedAction {
 
     /// A deterministic confidence score: high by default, docked when the
     /// amount is a dictation confusable or the date had to be guessed.
-    static func confidence(amount: Double, dateParsed: Bool = true) -> Double {
+    nonisolated static func confidence(amount: Double, dateParsed: Bool = true) -> Double {
         var score = 0.95
         if isDictationAmbiguous(amount) { score -= 0.3 }
         if !dateParsed { score -= 0.15 }

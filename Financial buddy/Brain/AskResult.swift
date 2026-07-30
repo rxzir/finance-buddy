@@ -21,7 +21,7 @@ struct AskResult: Sendable {
     /// Staged writes for the user to confirm — never applied silently.
     var proposedActions: [ProposedAction]
 
-    init(text: String, card: AskCard? = nil, proposedActions: [ProposedAction] = []) {
+    nonisolated init(text: String, card: AskCard? = nil, proposedActions: [ProposedAction] = []) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         self.text = trimmed.isEmpty ? (card?.renderedText() ?? trimmed) : trimmed
         self.card = card
@@ -39,7 +39,7 @@ enum AskCard: Equatable, Sendable {
     case proposal(ProposalCard)
 
     /// Flattens the card into plain prose for the transcript.
-    func renderedText() -> String {
+    nonisolated func renderedText() -> String {
         switch self {
         case .affordability(let card): return card.renderedText()
         case .spendingCapacity(let card): return card.renderedText()
@@ -55,7 +55,7 @@ enum AskCard: Equatable, Sendable {
 struct ProposalCard: Equatable, Sendable {
     var actions: [ProposedAction]
 
-    func renderedText() -> String {
+    nonisolated func renderedText() -> String {
         guard !actions.isEmpty else { return "" }
         let list = actions.map(\.summary).joined(separator: "; ")
         var text = "Ready to save: \(list)."
@@ -81,7 +81,7 @@ struct AffordabilityCard: Equatable, Sendable {
     @Guide(description: "Assumptions made, like second-order costs included", .maximumCount(4))
     var assumptions: [String]
 
-    func renderedText() -> String {
+    nonisolated func renderedText() -> String {
         var text: String
         if headroomAfter < 0 {
             text = "\(Money.string(monthlyAmount)) a month would put you \(Money.string(abs(headroomAfter))) short every month."
@@ -112,7 +112,7 @@ struct SpendingCapacityCard: Equatable, Sendable {
     @Guide(description: "How the figure was worked out, exactly as the tool put it")
     var basis: String
 
-    func renderedText() -> String {
+    nonisolated func renderedText() -> String {
         var text: String
         if amount < 0 {
             text = "You're \(Money.string(abs(amount))) over for \(period) — money already promised to bills."
@@ -143,7 +143,7 @@ struct CommitmentSummaryCard: Equatable, Sendable {
         var amount: Double
     }
 
-    func renderedText() -> String {
+    nonisolated func renderedText() -> String {
         guard !items.isEmpty else {
             return "You have no recurring commitments — your whole income is headroom."
         }

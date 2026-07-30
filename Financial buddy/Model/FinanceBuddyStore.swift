@@ -72,6 +72,11 @@ final class FinanceBuddyStore {
         }
     }
 
+    func updateBalance(_ amount: Double) {
+        finances.balance = amount
+        toasts.show("Balance set to \(Money.string(amount))")
+    }
+
     func addIncome(_ s: IncomeSource) {
         finances.incomeSources.append(s)
         toasts.show("\(s.name) added")

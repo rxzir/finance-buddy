@@ -82,24 +82,24 @@ struct Finances: Codable, Equatable {
     var paymentCategories: [String]
     var incomeCategories: [String]
 
-    static let defaultPaymentCategories = ["General", "Housing", "Utilities", "Subscriptions",
+    nonisolated static let defaultPaymentCategories = ["General", "Housing", "Utilities", "Subscriptions",
                                            "Health", "Transport", "Insurance", "Debt"]
-    static let defaultIncomeCategories = ["General", "Salary", "Freelance", "Refunds", "Gifts"]
+    nonisolated static let defaultIncomeCategories = ["General", "Salary", "Freelance", "Refunds", "Gifts"]
 
     /// All monthly income combined.
-    var totalIncome: Double {
+    nonisolated var totalIncome: Double {
         incomeSources.reduce(0) { $0 + $1.amount }
     }
 
-    var recurringIncome: Double {
+    nonisolated var recurringIncome: Double {
         incomeSources.filter(\.isRecurring).reduce(0) { $0 + $1.amount }
     }
 
-    var oneOffIncome: Double {
+    nonisolated var oneOffIncome: Double {
         incomeSources.filter { !$0.isRecurring }.reduce(0) { $0 + $1.amount }
     }
 
-    init(balance: Double,
+    nonisolated init(balance: Double,
          incomeSources: [IncomeSource] = [],
          recurringCommitments: [RecurringCommitment] = [],
          oneOffCosts: [OneOffCost] = [],
@@ -139,7 +139,7 @@ extension Finances {
     /// The next calendar date on or after `reference` on which a commitment
     /// with the given `dueDay` falls. If the target month is shorter than
     /// `dueDay`, the due date is clamped to the last day of that month.
-    static func nextOccurrence(ofDueDay dueDay: Int,
+    nonisolated static func nextOccurrence(ofDueDay dueDay: Int,
                                onOrAfter reference: Date,
                                calendar: Calendar) -> Date {
         let startOfReference = calendar.startOfDay(for: reference)
@@ -172,7 +172,7 @@ extension Finances {
     /// The next payday — the soonest upcoming occurrence of any recurring
     /// income. Each recurring income repeats monthly on the day of its
     /// anchor date. Falls back to today when no recurring income exists.
-    func nextPayday(asOf today: Date = Date(),
+    nonisolated func nextPayday(asOf today: Date = Date(),
                     calendar: Calendar = .current) -> Date {
         let start = calendar.startOfDay(for: today)
         let candidates = incomeSources.filter(\.isRecurring).map {
@@ -185,7 +185,7 @@ extension Finances {
 
     /// Every commitment and one-off cost whose next occurrence lands in the
     /// window [today, next payday], inclusive, sorted by date.
-    func upcomingObligations(asOf today: Date = Date(),
+    nonisolated func upcomingObligations(asOf today: Date = Date(),
                              calendar: Calendar = .current) -> [Obligation] {
         let start = calendar.startOfDay(for: today)
         let end = nextPayday(asOf: today, calendar: calendar)
@@ -226,7 +226,7 @@ extension Finances {
     /// occurrence and every future one-off, merged and sorted by date.
     /// Unlike `upcomingObligations` this is not limited to the pre-payday
     /// window; the view splits it at payday.
-    func upcomingSchedule(asOf today: Date = Date(),
+    nonisolated func upcomingSchedule(asOf today: Date = Date(),
                           calendar: Calendar = .current) -> [Obligation] {
         let start = calendar.startOfDay(for: today)
         var result: [Obligation] = []
@@ -296,21 +296,23 @@ extension Finances {
 
     /// Balance minus every obligation that lands before (and including)
     /// payday. This is the hero number.
-    func safeToSpendToday(asOf today: Date = Date(),
+    nonisolated func safeToSpendToday(asOf today: Date = Date(),
                           calendar: Calendar = .current) -> Double {
         let committed = upcomingObligations(asOf: today, calendar: calendar)
             .reduce(0) { $0 + $1.amount }
         return balance - committed
     }
 
-    /// Income minus the sum of all recurring commitments — the room you
-    /// have across a whole month, independent of the current balance.
-    var monthlyHeadroom: Double {
-        totalIncome - recurringCommitments.reduce(0) { $0 + $1.amount }
+    /// Recurring income minus the sum of all recurring commitments — the
+    /// structural monthly surplus, independent of one-off windfalls or the
+    /// current balance. One-off income is excluded so affordability judgements
+    /// are based on the reliable, repeating income only.
+    nonisolated var monthlyHeadroom: Double {
+        recurringIncome - recurringCommitments.reduce(0) { $0 + $1.amount }
     }
 
     /// Whole days from `today` until the next pay date (never negative).
-    func daysUntilPayday(asOf today: Date = Date(),
+    nonisolated func daysUntilPayday(asOf today: Date = Date(),
                          calendar: Calendar = .current) -> Int {
         let start = calendar.startOfDay(for: today)
         let payday = nextPayday(asOf: today, calendar: calendar)
@@ -353,7 +355,7 @@ extension Finances {
         )
     }
 
-    static var empty: Finances {
+    nonisolated static var empty: Finances {
         Finances(balance: 0)
     }
 }

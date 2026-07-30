@@ -13,15 +13,15 @@ import Foundation
 
 final class BrainContext: @unchecked Sendable {
     private let lock = NSLock()
-    private var _finances: Finances
-    private var _pending: [ProposedAction] = []
+    private nonisolated(unsafe) var _finances: Finances
+    private nonisolated(unsafe) var _pending: [ProposedAction] = []
 
     init(finances: Finances = .empty) {
         _finances = finances
     }
 
     /// The snapshot the current question is being answered against.
-    var finances: Finances {
+    nonisolated var finances: Finances {
         lock.lock()
         defer { lock.unlock() }
         return _finances
@@ -29,7 +29,7 @@ final class BrainContext: @unchecked Sendable {
 
     /// Called at the start of each turn: fresh snapshot, no leftover
     /// proposals from an earlier question.
-    func beginTurn(with finances: Finances) {
+    nonisolated func beginTurn(with finances: Finances) {
         lock.lock()
         defer { lock.unlock() }
         _finances = finances
@@ -37,14 +37,14 @@ final class BrainContext: @unchecked Sendable {
     }
 
     /// Tools stage writes here. Nothing is ever applied to the store.
-    func stage(_ action: ProposedAction) {
+    nonisolated func stage(_ action: ProposedAction) {
         lock.lock()
         defer { lock.unlock() }
         _pending.append(action)
     }
 
     /// Hands back everything staged this turn and clears the slate.
-    func drainPending() -> [ProposedAction] {
+    nonisolated func drainPending() -> [ProposedAction] {
         lock.lock()
         defer { lock.unlock() }
         let pending = _pending

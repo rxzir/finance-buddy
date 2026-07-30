@@ -9,6 +9,12 @@ import SwiftUI
 
 @main
 struct Financial_buddyApp: App {
+    init() {
+        #if canImport(UIKit)
+        UITabBar.appearance().tintColor = UIColor(Color.fbAccent)
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()

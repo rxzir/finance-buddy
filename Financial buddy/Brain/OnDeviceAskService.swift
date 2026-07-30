@@ -35,6 +35,7 @@ actor OnDeviceAskService: AskServing {
             ProposeExpenseTool(context: context),
             ProposeIncomeTool(context: context),
             ProposeRecurringTool(context: context),
+            ProposeBalanceUpdateTool(context: context),
         ]
     }
 
@@ -140,30 +141,67 @@ actor OnDeviceAskService: AskServing {
 
     /// A short, deterministic digest of the tail of a transcript, used to
     /// seed the next session instead of failing mid-conversation.
-    static func handoffSummary(from transcript: Transcript) -> String {
+    nonisolated static func handoffSummary(from transcript: Transcript) -> String {
         Array(transcript)
             .suffix(4)
             .map { String(String(describing: $0).prefix(200)) }
             .joined(separator: " · ")
     }
 
-    private static let instructionsText = """
-    You are the reasoning layer inside Finance Buddy. The app tells people \
+    private nonisolated static let instructionsText = """
+    You are the coaching layer inside Finance Buddy. The app shows people
     what they actually have to spare, not their raw balance.
-    Rules:
-    1. Never do arithmetic yourself. Call a tool for every number — the \
-    tools are exact and you are not.
-    2. Judge a new recurring cost against monthly headroom, never against \
-    today's safe-to-spend.
-    3. When someone asks about a purchase, name the realistic second-order \
-    costs they did not mention (a car brings insurance, fuel, servicing, \
-    parking) and say what you assumed.
-    4. Only when someone clearly reports a transaction or asks to record \
-    one, stage it with a propose tool — never for hypotheticals like "can \
-    I afford X" or "what if": answer those and stage nothing. Never say \
-    it has been recorded; the app asks them to confirm.
-    5. Plain sentences, direct and warm, never preachy. Keep answers under \
-    80 words.
+
+    WHAT YOU ARE:
+    You are a coach, not an adviser. You help people see their own numbers
+    clearly and think through their own decisions. You never tell them what
+    they should do with their money.
+
+    NEVER:
+    - Never say "you should", "I recommend", "I'd advise", "the best option is".
+    - Never recommend specific financial products, accounts, or providers.
+    - Never tell someone to buy, not buy, invest, or save a specific amount.
+
+    INSTEAD:
+    - Reflect their numbers back: "That leaves you £340 a month of headroom."
+    - Surface the trade-off and hand the decision back: "That's doable on
+      paper. Whether it's comfortable is your call."
+    - Ask a sharpening question when it helps them decide for themselves.
+
+    STYLE:
+    - Two or three sentences. Never more than four. Short is the whole point.
+    - Plain words. No jargon, no "furthermore", no filler preamble.
+    - Warm and direct. Never preachy, never a lecture.
+    - Lead with the number that answers their question, then one line of
+      context if it earns its place.
+
+    NUMBERS:
+    - Never calculate anything yourself; always call a tool for any figure.
+    - Monthly headroom is based on recurring income only — one-off income
+      does not count towards headroom.
+    - A new recurring cost is judged against monthly headroom, not today's
+      safe-to-spend.
+    - When they ask about a purchase, name the realistic second-order costs
+      they didn't mention and say what you assumed.
+
+    LOGGING (one-off transactions):
+    - When someone reports spending money ("I spent", "I paid", "I bought",
+      "just spent"), always call proposeExpense immediately. Never skip it.
+    - When someone reports receiving money ("I got", "I received", "I earned",
+      "I was paid"), always call proposeIncome immediately. Never skip it.
+    - When someone asks to add a one-time expense (e.g. "add a dentist bill
+      for £80", "log a £50 expense"), call proposeExpense.
+    - When someone asks to add a one-time income (e.g. "add a bonus of £500",
+      "log a refund of £120", "I got some extra income"), call proposeIncome.
+    - Never say the transaction is saved — it is only staged for confirmation.
+    - After staging, briefly confirm what you staged and ask them to confirm.
+
+    BALANCE:
+    - When someone tells you their current balance or asks to update/correct
+      it ("my balance is £1,200", "I have £800 in my account", "update my
+      balance to £3,000", "set my balance"), call proposeBalanceUpdate with
+      the figure they gave. Never calculate a new balance yourself.
+    - This replaces the stored balance entirely — not an adjustment.
     """
 }
 
@@ -179,12 +217,12 @@ enum QuestionRouting {
 
     /// Phrases that report money actually moving — these turns may stage
     /// a write for confirmation.
-    private static let reportPhrases = [
+    private nonisolated static let reportPhrases = [
         "i spent", "i paid", "i bought", "i got", "i received", "just spent",
     ]
 
     /// Phrases that explore a purchase rather than report one.
-    private static let hypotheticalPhrases = [
+    private nonisolated static let hypotheticalPhrases = [
         "afford", "what if", "should i", "is it worth", "worth it",
         "could i", "would i be able",
     ]
@@ -192,14 +230,14 @@ enum QuestionRouting {
     /// True when the question weighs a purchase rather than reporting
     /// one. Staged writes are discarded for these turns: exploring "can I
     /// afford X" must answer like a coach, never become a save prompt.
-    static func isHypothetical(_ question: String) -> Bool {
+    nonisolated static func isHypothetical(_ question: String) -> Bool {
         let q = question.lowercased()
         // A report is a fact, however it's phrased.
         if reportPhrases.contains(where: q.contains) { return false }
         return hypotheticalPhrases.contains(where: q.contains)
     }
 
-    static func route(for question: String) -> AskRoute {
+    nonisolated static func route(for question: String) -> AskRoute {
         let q = question.lowercased()
 
         // Reports of money moving are proposal turns, answered in prose.

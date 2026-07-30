@@ -2,9 +2,8 @@
 //  ContentView.swift
 //  Finance buddy
 //
-//  Root of the app: the biometric lock gate, then the custom tab
-//  interface. Deliberately no TabView / NavigationStack — the tab bar is a
-//  plain HStack of buttons so iOS 26's Liquid Glass can't restyle it.
+//  Root of the app: the biometric lock gate, then the native iOS tab
+//  interface with a custom Add action button.
 //  Ask is the landing tab.
 //
 
@@ -74,9 +73,8 @@ struct ContentView: View {
     @State private var store: FinanceBuddyStore
     @State private var lock = AppLock()
     @State private var tab: Tab = .ask
-    @State private var keyboardVisible = false
-    /// Ask's hero header collapse — owned here because the header renders
-    /// in the pager's top bar, but AskView's transcript drives it.
+    /// Ask's hero header collapse — owned here so AskView's scroll can
+    /// drive AskHeaderBar without lifting that state into AskView.
     @State private var askHeaderCollapsed = false
     /// The one modal that's up, rendered at the root above the tab bar.
     @State private var modal: AppModal?
@@ -144,58 +142,16 @@ struct ContentView: View {
     }
     #endif
 
-    private var mainInterface: some View {
-        // Horizontally paged screens — swipe between tabs. A non-lazy
-        // HStack keeps every page (and its state, like the chat) alive.
-        ScrollView(.horizontal) {
-            HStack(spacing: 0) {
-                ForEach(Tab.allCases, id: \.self) { page in
-                    pageView(for: page)
-                        .containerRelativeFrame(.horizontal)
-                }
-            }
-            .scrollTargetLayout()
-        }
-        .scrollTargetBehavior(.paging)
-        .scrollPosition(id: pagedTab)
-        .scrollIndicators(.hidden)
-        // Soft progressive-blur pockets where page content meets the
-        // bars. iOS only renders edge effects for the outermost scroll
-        // view, so this must sit on the pager — a per-page
-        // scrollEdgeEffectStyle/safeAreaBar never blurs.
-        .scrollEdgeEffectStyle(.soft, for: .vertical)
-        // Title bar lives here for the same reason: pages scroll under it
-        // and the system fades content into its pocket. Its content swaps
-        // with the selected tab.
-        .safeAreaBar(edge: .top) { titleBar }
-        // Tab bar lives here — fixed above the pager so it never slides
-        // with page content during horizontal swipes.
-        .safeAreaBar(edge: .bottom) {
-            if !keyboardVisible {
-                CustomTabBar(selection: pagedTab)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .animation(.easeInOut(duration: 0.2), value: keyboardVisible)
-        // Modal and toast overlays sit above the tab bar in z-order.
-        .overlay { modalLayer }
-        .overlay { FBToastView(center: store.toasts) }
-        .animation(.fbModal, value: modal)
-        .observeKeyboard(isVisible: $keyboardVisible)
-    }
-
-    private var modalLayer: some View {
-        AppModalLayer(store: store, modal: $modal, onSignOut: performSignOut)
-    }
-
-    /// The pager's top bar: each tab's title, crossfading on tab change.
     @ViewBuilder
-    private var titleBar: some View {
-        switch tab {
-        case .ask:     AskHeaderBar(store: store, collapsed: askHeaderCollapsed)
-        case .budget:  PageTitleBar(title: "Budget")
-        case .profile: PageTitleBar(title: "Profile")
-        }
+    private var mainInterface: some View {
+        #if canImport(Supabase)
+        MainTabShell(store: store, tab: $tab, askHeaderCollapsed: $askHeaderCollapsed,
+                     modal: $modal, email: auth.email, canSignOut: true,
+                     onSignOut: performSignOut)
+        #else
+        MainTabShell(store: store, tab: $tab, askHeaderCollapsed: $askHeaderCollapsed,
+                     modal: $modal)
+        #endif
     }
 
     private func performSignOut() async {
@@ -204,45 +160,6 @@ struct ContentView: View {
         // Drop the local copy of the signed-out user's data.
         store.persistence = nil
         store.finances = .empty
-        #endif
-    }
-
-    /// Bridges the optional scroll position to the concrete tab selection.
-    /// The setter animates so the tab bar pill glides when the change
-    /// comes from a swipe, exactly as it does from a tap.
-    private var pagedTab: Binding<Tab?> {
-        Binding(get: { tab },
-                set: { newValue in
-                    guard let newValue, newValue != tab else { return }
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        tab = newValue
-                    }
-                })
-    }
-
-    @ViewBuilder
-    private func pageView(for page: Tab) -> some View {
-        switch page {
-        case .ask:
-            AskView(store: store, isActive: tab == .ask,
-                    headerCollapsed: $askHeaderCollapsed,
-                    present: { modal = $0 })
-        case .budget:
-            BudgetView(store: store,
-                       present: { modal = $0 })
-        case .profile:
-            profileView
-        }
-    }
-
-    @ViewBuilder
-    private var profileView: some View {
-        #if canImport(Supabase)
-        ProfileView(store: store, email: auth.email, canSignOut: true,
-                    present: { modal = $0 })
-        #else
-        ProfileView(store: store, email: nil, canSignOut: false,
-                    present: { modal = $0 })
         #endif
     }
 }
@@ -297,8 +214,8 @@ enum Tab: CaseIterable {
     }
 }
 
-/// The plain page title bar (Budget / Profile), rendered in the pager's
-/// top safeAreaBar so the soft edge blur pockets under it.
+/// The plain page title bar (Budget / Profile), attached via safeAreaBar
+/// so the native scroll edge effect extends into it automatically.
 struct PageTitleBar: View {
     let title: String
 
@@ -316,120 +233,95 @@ struct PageTitleBar: View {
     }
 }
 
-/// Minimal pager bar: a floating glass capsule with three icons and a
-/// pill that glides between them. Swiping the pages moves the selection;
-/// tapping an icon jumps to the page. Not a TabView.
-struct CustomTabBar: View {
-    @Binding var selection: Tab?
-    @Namespace private var pill
-    @Environment(\.colorScheme) private var scheme
+// MARK: - Tab shell
+
+/// Single source of truth for the tab layout. Both ContentView and the
+/// #Preview instantiate this, so any structural change applies to both.
+struct MainTabShell: View {
+    let store: FinanceBuddyStore
+    @Binding var tab: Tab
+    @Binding var askHeaderCollapsed: Bool
+    @Binding var modal: AppModal?
+    var email: String? = nil
+    var canSignOut: Bool = false
+    var onSignOut: () async -> Void = {}
+
+    @State private var keyboardVisible = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(Tab.allCases, id: \.self) { tab in
-                Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                        selection = tab
-                    }
-                } label: {
-                    Image(systemName: tab.icon)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(selection == tab ? Color.fbInk : Color.fbSoftText)
-                        .frame(width: 58, height: 40)
-                        .background {
-                            if selection == tab {
-                                Capsule()
-                                    .fill(Color.fbInk.opacity(0.10))
-                                    
-                                    .matchedGeometryEffect(id: "activePill", in: pill)
-                            }
-                        }
-                }
-                .buttonStyle(.pressable)
-                .accessibilityLabel(tab.title)
-            }
-        }
-        .padding(5)
-        .background {
-            Capsule().fill(.ultraThinMaterial)
-            // The deepening tint reads right in dark; light mode gets a
-            // frosted white lift instead so the bar doesn't turn muddy.
-            Capsule().fill(
-                scheme == .dark
-                    ? LinearGradient(colors: [Color.black.opacity(0.2),
-                                              Color.black.opacity(0.6)],
-                                     startPoint: .top, endPoint: .bottom)
-                    : LinearGradient(colors: [Color.white.opacity(0.7),
-                                              Color.white.opacity(0.35)],
-                                     startPoint: .top, endPoint: .bottom)
-            )
-        }
-        .overlay(
-            Capsule().strokeBorder(
-                LinearGradient(colors: [Color.fbInk.opacity(0.16),
-                                        Color.fbInk.opacity(0.04)],
-                               startPoint: .top, endPoint: .bottom),
-                lineWidth: 0.5
-            )
-        )
-        .shadow(color: .black.opacity(scheme == .dark ? 0.25 : 0.10), radius: 18, y: 6)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
-        .frame(maxWidth: .infinity)
-    }
-}
+        ZStack {
+            FBBlobBackground()
+            TabView(selection: $tab) {
+                AskView(store: store, isActive: tab == .ask,
+                        headerCollapsed: $askHeaderCollapsed,
+                        present: { modal = $0 })
+                .tag(Tab.ask)
 
-#Preview("Locked") {
-    ContentView()
-}
+                BudgetView(store: store, present: { modal = $0 })
+                .tag(Tab.budget)
 
-#Preview("Unlocked shell") {
-    // Shows the main interface (bypassing the lock) so the custom tab bar
-    // is visible composed with a screen.
-    struct ShellPreview: View {
-        @State private var tab: Tab? = .ask
-        @State private var modal: AppModal?
-        let store = FinanceBuddyStore(finances: .sample)
-        var body: some View {
-            ScrollView(.horizontal) {
-                HStack(spacing: 0) {
-                    ForEach(Tab.allCases, id: \.self) { page in
-                        Group {
-                            switch page {
-                            case .ask:
-                                AskView(store: store, present: { modal = $0 })
-                            case .budget:
-                                BudgetView(store: store, present: { modal = $0 })
-                            case .profile:
-                                ProfileView(store: store, email: "preview@example.com",
-                                            canSignOut: true, present: { modal = $0 })
-                            }
-                        }
-                        .containerRelativeFrame(.horizontal)
-                    }
-                }
-                .scrollTargetLayout()
+                ProfileView(store: store, email: email,
+                            canSignOut: canSignOut, present: { modal = $0 })
+                .tag(Tab.profile)
             }
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: $tab)
-            .scrollIndicators(.hidden)
-            .scrollEdgeEffectStyle(.soft, for: .vertical)
-            .safeAreaBar(edge: .top) {
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            // safeAreaInset (not safeAreaBar) properly propagates through
+            // UIPageViewController's additionalSafeAreaInsets to each page, so
+            // content isn't clipped by the bars and per-page scroll edge effects
+            // render at the correct boundary.
+            .safeAreaInset(edge: .top, spacing: 0) {
                 switch tab {
-                case .budget:  PageTitleBar(title: "Budget")
-                case .profile: PageTitleBar(title: "Profile")
-                default:       AskHeaderBar(store: store, collapsed: false)
+                case .ask:    AskHeaderBar(store: store, collapsed: askHeaderCollapsed)
+                case .budget: PageTitleBar(title: Tab.budget.title)
+                case .profile: PageTitleBar(title: Tab.profile.title)
                 }
             }
-            .safeAreaBar(edge: .bottom) { CustomTabBar(selection: $tab) }
-            .overlay { AppModalLayer(store: store, modal: $modal) }
-            .animation(.fbModal, value: modal)
-            .background {
-                FBBackground()
-                FBBlobBackground()
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                CustomTabBar(
+                    selection: $tab,
+                    onAdd: { modal = .quickAdd },
+                    isVisible: !keyboardVisible
+                )
             }
-            .preferredColorScheme(.dark)
+            .observeKeyboard(isVisible: $keyboardVisible)
+            .tint(Color.fbAccent)
+            // Recede the app content when any modal is open — same depth
+            // values as a ModalCard at depth 1 so the initial modal feels
+            // consistent with stacked modal transitions.
+            .scaleEffect(modal != nil ? 0.95 : 1, anchor: .bottom)
+            .offset(y: modal != nil ? -10 : 0)
+            .blur(radius: modal != nil ? 1.5 : 0)
+            .opacity(modal != nil ? 0.55 : 1)
+            .overlay { AppModalLayer(store: store, modal: $modal, onSignOut: onSignOut) }
+            .overlay { FBToastView(center: store.toasts) }
+            .animation(.fbModal, value: modal)
         }
     }
-    return ShellPreview()
 }
+    
+    #Preview("Locked") {
+        ContentView()
+    }
+    
+    #Preview("Unlocked shell") {
+        struct ShellPreview: View {
+            @State private var tab: Tab = .ask
+            @State private var askHeaderCollapsed = false
+            @State private var modal: AppModal?
+            let store = FinanceBuddyStore(finances: .sample)
+            
+            var body: some View {
+                ZStack {
+                    FBBackground()
+                    FBBlobBackground()
+                    MainTabShell(store: store, tab: $tab,
+                                 askHeaderCollapsed: $askHeaderCollapsed,
+                                 modal: $modal, email: "preview@example.com",
+                                 canSignOut: true)
+                }
+                .preferredColorScheme(.dark)
+            }
+        }
+        return ShellPreview()
+    }
+

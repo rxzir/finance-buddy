@@ -18,6 +18,7 @@ struct ProfileView: View {
     /// Asks the root to present a modal (rendered above the tab bar).
     var present: (AppModal) -> Void = { _ in }
     @AppStorage("fbAppearance") private var appearanceRaw = FBAppearance.dark.rawValue
+    @State private var showStatementImport = false
 
     var body: some View {
         ZStack {
@@ -28,8 +29,9 @@ struct ProfileView: View {
             ScrollView {
                 VStack(spacing: 16) {
                     identity
-                    appearanceCard
+                    themeCard
                     categoriesCard
+                    importCard
                     footer
                 }
                 .padding(.horizontal, 20)
@@ -37,6 +39,9 @@ struct ProfileView: View {
                 .padding(.bottom, 24)
             }
             .scrollEdgeEffectStyle(.soft, for: .vertical)
+        }
+        .fullScreenCover(isPresented: $showStatementImport) {
+            StatementImportFlow(store: store) { showStatementImport = false }
         }
     }
 
@@ -64,12 +69,12 @@ struct ProfileView: View {
         return String(first).uppercased()
     }
 
-    // MARK: Appearance
+    // MARK: Theme
 
-    private var appearanceCard: some View {
+    private var themeCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Appearance")
+                Text("Theme")
                     .font(.fbHeader(17))
                     .tracking(-0.3)
                     .foregroundStyle(Color.fbInk)
@@ -128,6 +133,42 @@ struct ProfileView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.pressable)
+    }
+
+    // MARK: Import
+
+    private var importCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Import")
+                    .font(.fbHeader(17))
+                    .tracking(-0.3)
+                    .foregroundStyle(Color.fbInk)
+                    .padding(.bottom, 6)
+
+                Button {
+                    showStatementImport = true
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Bank statement")
+                                .font(.fbBody(15, weight: .medium))
+                                .foregroundStyle(Color.fbInk)
+                            Text("PDF from your bank app")
+                                .font(.fbBody(13))
+                                .foregroundStyle(Color.fbSoftText)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color.fbSoftText)
+                    }
+                    .padding(.vertical, 11)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.pressable)
+            }
+        }
     }
 
     // MARK: Footer — version whisper + quiet sign out

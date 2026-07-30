@@ -34,6 +34,8 @@ extension Color {
     static let fbCommitment = Color(light: 0x9A9A9A, dark: 0x6F6F6F)
     /// Text/icons placed on filled accent surfaces.
     static let fbOnAccent = Color(light: 0xF7F7F5, dark: 0x0A0A0A)
+    /// Sky-blue accent — used sparingly for interactive highlights.
+    static let fbAccent = Color(hex: 0x7ACDF7)
 
     init(hex: UInt32, opacity: Double = 1.0) {
         let r = Double((hex >> 16) & 0xFF) / 255.0
@@ -146,9 +148,9 @@ extension Font {
 enum Money {
     /// Locale currency symbol shown throughout the UI. The spec uses £,
     /// so we default to GBP but keep it in one place.
-    static let currencyCode = "GBP"
+    nonisolated static let currencyCode = "GBP"
 
-    static func string(_ value: Double, showsSign: Bool = false) -> String {
+    nonisolated static func string(_ value: Double, showsSign: Bool = false) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = currencyCode
@@ -248,9 +250,9 @@ struct FBPrimaryButton: View {
                 .font(.fbBody(16, weight: .semibold))
                 .foregroundStyle(Color.fbOnAccent)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
+                .padding(.vertical, 16)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    Capsule()
                         .fill(destructive ? Color.fbWarning : Color.fbPositive)
                 )
         }
@@ -275,11 +277,11 @@ struct FBSwitchStyle: ToggleStyle {
                 }
             } label: {
                 Capsule()
-                    .fill(configuration.isOn ? Color.fbPositive : Color.fbInk.opacity(0.12))
+                    .fill(configuration.isOn ? Color.fbAccent : Color.fbInk.opacity(0.12))
                     .overlay(Capsule().strokeBorder(Color.fbHairline, lineWidth: 1))
                     .overlay(alignment: configuration.isOn ? .trailing : .leading) {
                         Circle()
-                            .fill(configuration.isOn ? Color.fbOnAccent : Color.fbSoftText)
+                            .fill(configuration.isOn ? Color.white : Color.fbSoftText)
                             .padding(3)
                     }
                     .frame(width: 46, height: 28)
@@ -315,13 +317,13 @@ struct FBSecondaryButton: View {
                 .font(.fbBody(15, weight: .semibold))
                 .foregroundStyle(Color.fbInk)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
+                .padding(.vertical, 14)
                 .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    Capsule()
                         .fill(Color.fbInk.opacity(0.08))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    Capsule()
                         .strokeBorder(Color.fbInk.opacity(0.25), lineWidth: 1)
                 )
         }

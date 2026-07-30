@@ -38,9 +38,9 @@ final class ChatViewModel {
     /// still stage, confirming explains it can't save.
     @ObservationIgnored private weak var store: FinanceBuddyStore?
 
-    init(store: FinanceBuddyStore? = nil, service: AskServing = OnDeviceAskService()) {
+    init(store: FinanceBuddyStore? = nil, service: (any AskServing)? = nil) {
         self.store = store
-        self.service = service
+        self.service = service ?? OnDeviceAskService()
     }
 
     func send(_ text: String, snapshot: Finances) {
@@ -97,6 +97,11 @@ final class ChatViewModel {
         resolvePending(applying: false)
     }
 
+    func clearMessages() {
+        pendingActions = []
+        messages = []
+    }
+
     private func resolvePending(applying: Bool) {
         let actions = pendingActions
         pendingActions = []
@@ -121,6 +126,8 @@ final class ChatViewModel {
             case .addRecurring(let draft):
                 store.addCommitment(RecurringCommitment(name: draft.name, amount: draft.amount,
                                                         dueDay: draft.dueDay, category: "General"))
+            case .updateBalance(let draft):
+                store.updateBalance(draft.newBalance)
             }
         }
         let saved = actions.map(\.summary).joined(separator: "; ")
@@ -146,6 +153,10 @@ struct AskView: View {
     @State private var draft = ""
     @State private var dictation = DictationController()
     @FocusState private var inputFocused: Bool
+    // Pull-to-clear state
+    @State private var clearDrag: CGFloat = 0  // 0…1, normalised overscroll past header threshold
+    @State private var clearArmed = false       // crossed the fire threshold, waiting for finger-up
+    @State private var clearVersion = 0        // increments on each clear → drives success haptic
 
     /// Short, wry, budget-flavoured — one is picked per visit.
     private static let greetings = [
@@ -229,6 +240,7 @@ struct AskView: View {
                 .foregroundStyle(Color.fbSoftText)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 44)
+                .padding(.top, 60)
             Spacer()
             suggestionButtons
                 .padding(.horizontal, 20)
@@ -240,17 +252,19 @@ struct AskView: View {
     }
 
     private var suggestionButtons: some View {
-        VStack(spacing: 10) {
+        VStack(alignment: .trailing, spacing: 10) {
             ForEach(AskView.suggestions, id: \.self) { suggestion in
                 Button {
                     model.send(suggestion, snapshot: store.finances)
                 } label: {
+                    HStack{
+                        Spacer()
                     HStack {
                         Text(suggestion)
                             .font(.fbBody(15, weight: .medium))
                             .foregroundStyle(Color.fbInk)
                             .multilineTextAlignment(.leading)
-                        Spacer()
+                        //   Spacer()
                         Image(systemName: "arrow.up.right")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(Color.fbSoftText)
@@ -258,63 +272,128 @@ struct AskView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 13)
                     .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        UnevenRoundedRectangle(topLeadingRadius: 16,
+                                         bottomLeadingRadius: 16,
+                                         bottomTrailingRadius: 8,
+                                         topTrailingRadius: 16, style: .continuous)
                             .fill(Color.fbCard)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        UnevenRoundedRectangle(topLeadingRadius: 16,
+                                         bottomLeadingRadius: 16,
+                                         bottomTrailingRadius: 8,
+                                         topTrailingRadius: 16, style: .continuous)
                             .strokeBorder(Color.fbHairline, lineWidth: 1)
                     )
                 }
                 .buttonStyle(.pressable)
             }
+            }
         }
     }
 
     private var transcript: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(model.messages) { message in
-                        MessageBubble(message: message)
-                            .id(message.id)
-                        if awaitsDecision(message) {
-                            ProposalDecisionButtons(onConfirm: { model.confirmPending() },
-                                                    onCancel: { model.cancelPending() })
+        // The indicator is layered BEHIND the scroll view. SwiftUI's ScrollView
+        // has a transparent background, so when the user rubber-bands at the
+        // bottom the bounce area exposes the indicator through the clear canvas.
+        // No clipping or offset tricks needed.
+        ZStack {
+            VStack {
+                Spacer()
+                ClearIndicator(progress: clearDrag, armed: clearArmed)
+                    .padding(.bottom, 20)
+            }
+            .allowsHitTesting(false)
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: 12) {
+                        ForEach(model.messages) { message in
+                            if awaitsDecision(message) {
+                                ProposalMessageCard(
+                                    message: message,
+                                    onConfirm: { model.confirmPending() },
+                                    onCancel: { model.cancelPending() }
+                                )
+                                .id(message.id)
+                                .transition(.asymmetric(
+                                    insertion: .opacity.combined(with: .move(edge: .bottom)),
+                                    removal: .opacity.combined(with: .move(edge: .top))
+                                ))
+                            } else {
+                                MessageBubble(message: message)
+                                    .id(message.id)
+                                    .transition(.asymmetric(
+                                        insertion: .opacity.combined(with: .move(edge: .bottom)),
+                                        removal: .opacity.combined(with: .move(edge: .top))
+                                    ))
+                            }
+                        }
+                        if model.isThinking {
+                            ThinkingBubble()
+                                .id("thinking")
+                                .transition(.opacity)
                         }
                     }
-                    if model.isThinking {
-                        ThinkingBubble()
-                            .id("thinking")
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, minHeight: 1)
+                    .contentShape(Rectangle())
+                    .onTapGesture { inputFocused = false }
+                }
+                .scrollDismissesKeyboard(.immediately)
+                .scrollEdgeEffectStyle(.soft, for: .vertical)
+                // Top overscroll: pulling down past the top expands the hero header.
+                .onScrollGeometryChange(for: CGFloat.self,
+                                        of: { $0.contentOffset.y + $0.contentInsets.top }) { _, offset in
+                    if offset < -50, headerCollapsed {
+                        withAnimation(.fbModal) { headerCollapsed = false }
+                    } else if offset > 12, !headerCollapsed, !model.messages.isEmpty {
+                        withAnimation(.fbModal) { headerCollapsed = true }
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 8)
-                .frame(maxWidth: .infinity)
-                .frame(maxWidth: .infinity, minHeight: 1)
-                .contentShape(Rectangle())
-                .onTapGesture { inputFocused = false } // tap transcript → dismiss keyboard
-            }
-            .scrollDismissesKeyboard(.immediately)
-            .scrollEdgeEffectStyle(.soft, for: .vertical)
-            // Scrolling the transcript keeps the hero minimised; pulling
-            // down past the top (rubber-band) brings it back.
-            .onScrollGeometryChange(for: CGFloat.self,
-                                    of: { $0.contentOffset.y + $0.contentInsets.top }) { _, offset in
-                if offset < -50, headerCollapsed {
-                    withAnimation(.fbModal) { headerCollapsed = false }
-                } else if offset > 12, !headerCollapsed, !model.messages.isEmpty {
-                    withAnimation(.fbModal) { headerCollapsed = true }
+                // Bottom overscroll: measures how far past the natural resting
+                // position the user has pulled. naturalMax is the content offset
+                // at the bottom edge at rest, accounting for bottom content inset.
+                // This avoids the contentInsets.top bug where adding top inset to
+                // the offset produces false overscroll at rest.
+                .onScrollGeometryChange(for: CGFloat.self,
+                                        of: { geo in
+                                            let naturalMax = max(0, geo.contentSize.height
+                                                                 - geo.containerSize.height
+                                                                 + geo.contentInsets.bottom)
+                                            return max(0, geo.contentOffset.y - naturalMax)
+                                        }) { _, overscroll in
+                                            clearDrag = min(1
+                                                            , overscroll / 80)
+                    let nowArmed = overscroll >= 80
+                    if nowArmed != clearArmed { clearArmed = nowArmed }
+                }
+                // Fire when the finger lifts while armed.
+                .onScrollPhaseChange { old, new in
+                    guard old == .interacting, clearArmed else { return }
+                    performClear()
+                }
+                .sensoryFeedback(.impact(weight: .heavy), trigger: clearArmed) { _, new in new }
+                .sensoryFeedback(.success, trigger: clearVersion)
+                .onChange(of: model.messages.count) {
+                    withAnimation { proxy.scrollTo(model.messages.last?.id, anchor: .bottom) }
+                }
+                .onChange(of: model.isThinking) {
+                    if model.isThinking {
+                        withAnimation { proxy.scrollTo("thinking", anchor: .bottom) }
+                    }
                 }
             }
-            .onChange(of: model.messages.count) {
-                withAnimation { proxy.scrollTo(model.messages.last?.id, anchor: .bottom) }
-            }
-            .onChange(of: model.isThinking) {
-                if model.isThinking {
-                    withAnimation { proxy.scrollTo("thinking", anchor: .bottom) }
-                }
-            }
+        }
+    }
+
+    private func performClear() {
+        clearArmed = false
+        clearVersion &+= 1
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+            model.clearMessages()
         }
     }
 
@@ -338,20 +417,6 @@ struct AskView: View {
             }
 
             HStack(spacing: 10) {
-                // Quick add sits to the left of the field.
-                Button {
-                    present(.quickAdd)
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.fbInk)
-                        .frame(width: 44, height: 44)
-                        .background(Circle().fill(Color.fbInk.opacity(0.06)))
-                        .overlay(Circle().strokeBorder(Color.fbHairline, lineWidth: 1))
-                }
-                .buttonStyle(.pressable)
-                .accessibilityLabel("Add income or expense")
-
                 // The field pill, with the mic living inside it.
                 HStack(spacing: 8) {
                     TextField("Ask anything", text: $draft, axis: .vertical)
@@ -382,14 +447,15 @@ struct AskView: View {
                 .padding(.leading, 16)
                 .padding(.trailing, 8)
                 .padding(.vertical, 7)
-                .background(
+    /*            .background(
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .fill(Color.fbCard)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .strokeBorder(Color.fbHairline, lineWidth: 1)
-                )
+                )*/
+                .glassEffect()
 
                 // Send only exists once there's something to send.
                 if canSend {
@@ -547,20 +613,82 @@ private struct MessageBubble: View {
     }
 }
 
-/// The tap targets for a staged write: Confirm on top, Cancel below —
-/// the design system's vertical stack, never side-by-side. Typing or
-/// dictating "confirm"/"cancel" still works through the same paths.
-private struct ProposalDecisionButtons: View {
+/// A staged write: shows the assistant's message and Confirm/Cancel
+/// side-by-side in a card, so the question and actions read as one unit.
+private struct ProposalMessageCard: View {
+    let message: ChatMessage
     let onConfirm: () -> Void
     let onCancel: () -> Void
 
     var body: some View {
-        VStack(spacing: 8) {
-            FBPrimaryButton(label: "Confirm", action: onConfirm)
-            FBSecondaryButton(label: "Cancel", action: onCancel)
+        Card(padding: 16) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(message.text)
+                    .font(.fbBody(16))
+                    .foregroundStyle(Color.fbInk)
+                    .lineSpacing(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack(spacing: 10) {
+                    Button(action: onConfirm) {
+                        Text("Confirm")
+                            .font(.fbBody(15, weight: .semibold))
+                            .foregroundStyle(Color.fbOnAccent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(Capsule().fill(Color.fbPositive))
+                    }
+                    .buttonStyle(.pressable)
+
+                    Button(action: onCancel) {
+                        Text("Cancel")
+                            .font(.fbBody(15, weight: .semibold))
+                            .foregroundStyle(Color.fbInk)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(Capsule().fill(Color.fbInk.opacity(0.08)))
+                            .overlay(Capsule().strokeBorder(Color.fbInk.opacity(0.25), lineWidth: 1))
+                    }
+                    .buttonStyle(.pressable)
+                }
+            }
         }
-        .padding(.top, 2)
-        .transition(.opacity)
+    }
+}
+
+/// Sits behind the scroll view at the bottom of the ZStack. The scroll view's
+/// transparent bounce area reveals it when the user rubber-bands past the last
+/// message. Progress 0→1 = normalised overscroll; armed = threshold crossed.
+private struct ClearIndicator: View {
+    let progress: CGFloat
+    let armed: Bool
+
+    var body: some View {
+        VStack(spacing: 5) {
+            // Circular spinner that rotates with the pull, fills green when armed.
+            ZStack {
+                Circle()
+                    .fill(armed ? Color.fbPositive : Color.clear)
+                    .frame(width: 30, height: 30)
+
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(armed ? Color.fbOnAccent : Color.fbSoftText)
+                    .rotationEffect(.degrees(armed ? 360 : Double(progress) * 270))
+            }
+
+            Text(armed ? "Release to clear" : "Pull to clear")
+                .font(.fbBody(14, weight: .medium))
+                .foregroundStyle(armed ? Color.fbInk : Color.fbSoftText)
+                .animation(.none, value: armed)
+                .frame(width: 150)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .shadow(color: .black.opacity(0.1), radius: 8, y: 3)
+        .scaleEffect(0.75 + 0.25 * Double(progress))
+        .opacity(Double(min(1, Double(progress) * 1.5)))
+        .animation(.spring(response: 0.7, dampingFraction: 0.7), value: armed)
     }
 }
 
