@@ -9,7 +9,7 @@
 
 import Foundation
 import Testing
-@testable import Financial_buddy
+@testable import Headroom
 
 // MARK: - Fixture
 
@@ -65,12 +65,13 @@ struct FinanceCalculationTests {
     }
 
     @Test func monthlyHeadroom() {
-        // (2400 + 120) income − (950 + 45) recurring = 1525.
-        #expect(Fixture.finances.monthlyHeadroom == 1525)
+        // Recurring income only (2400) − (950 + 45) recurring = 1405.
+        // Non-recurring income (Refund 120) is excluded by design.
+        #expect(Fixture.finances.monthlyHeadroom == 1405)
     }
 
     @Test func headroomAfterAddingMonthlyCost() {
-        #expect(Fixture.finances.headroomAfterAdding(monthly: 400) == 1125)
+        #expect(Fixture.finances.headroomAfterAdding(monthly: 400) == 1005)
     }
 
     @Test func weekCapacityWindow() {
@@ -298,7 +299,7 @@ struct ConfirmationApplyTests {
     }
 
     @Test func confirmWritesToTheStoreAndClearsPending() {
-        let store = FinanceBuddyStore(finances: .empty)
+        let store = HeadroomStore(finances: .empty)
         let model = ChatViewModel(store: store, service: StubService())
         model.pendingActions = [
             .logExpense(.init(name: "Lunch", amount: 12, date: Fixture.today, confidence: 0.95)),
@@ -316,7 +317,7 @@ struct ConfirmationApplyTests {
     }
 
     @Test func cancelDropsEverythingWithoutWriting() {
-        let store = FinanceBuddyStore(finances: .empty)
+        let store = HeadroomStore(finances: .empty)
         let model = ChatViewModel(store: store, service: StubService())
         model.pendingActions = [
             .logIncome(.init(name: "Refund", amount: 50, date: Fixture.today, confidence: 0.95)),
@@ -330,7 +331,7 @@ struct ConfirmationApplyTests {
     }
 
     @Test func tappingConfirmAppliesAndClearsPending() {
-        let store = FinanceBuddyStore(finances: .empty)
+        let store = HeadroomStore(finances: .empty)
         let model = ChatViewModel(store: store, service: StubService())
         model.pendingActions = [
             .logExpense(.init(name: "Lunch", amount: 12, date: Fixture.today, confidence: 0.95)),
@@ -344,7 +345,7 @@ struct ConfirmationApplyTests {
     }
 
     @Test func tappingCancelDropsWithoutWriting() {
-        let store = FinanceBuddyStore(finances: .empty)
+        let store = HeadroomStore(finances: .empty)
         let model = ChatViewModel(store: store, service: StubService())
         model.pendingActions = [
             .logExpense(.init(name: "Lunch", amount: 12, date: Fixture.today, confidence: 0.95)),

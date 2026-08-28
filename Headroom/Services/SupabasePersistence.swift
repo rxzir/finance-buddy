@@ -14,6 +14,9 @@
 #if canImport(Supabase)
 import Foundation
 import Supabase
+#if canImport(AuthenticationServices)
+import AuthenticationServices
+#endif
 
 // MARK: - Configuration
 
@@ -32,7 +35,8 @@ enum SupabaseConfig {
             // runtime notice. We read auth.session directly (which
             // validates/refreshes), so the emitted initial session's
             // validity doesn't affect us.
-            auth: .init(emitLocalSessionAsInitialSession: true)
+            // headroom://login-callback must be added to Supabase dashboard → Auth → URL Configuration → Redirect URLs
+            auth: .init(redirectToURL: URL(string: "headroom://login-callback"), emitLocalSessionAsInitialSession: true)
         )
     )
 
@@ -119,6 +123,13 @@ final class SupabaseAuthModel {
         }
     }
 
+    func resetPassword(email: String) async {
+        await run {
+            try await self.client.auth.resetPasswordForEmail(email)
+            self.infoMessage = "Reset link sent to \(email). Check your inbox."
+        }
+    }
+
     func signOut() async {
         try? await client.auth.signOut()
         userId = nil
@@ -133,6 +144,31 @@ final class SupabaseAuthModel {
         do { try await work() }
         catch { errorMessage = error.localizedDescription }
     }
+
+    #if canImport(AuthenticationServices)
+    func signInWithApple(credential: ASAuthorizationAppleIDCredential, nonce: String) async {
+        guard let tokenData = credential.identityToken,
+              let idToken = String(data: tokenData, encoding: .utf8) else {
+            errorMessage = "Apple sign-in failed: couldn't read identity token"
+            return
+        }
+        await run {
+            let session = try await self.client.auth.signInWithIdToken(
+                credentials: OpenIDConnectCredentials(provider: .apple, idToken: idToken, nonce: nonce)
+            )
+            self.userId = session.user.id
+            self.email = session.user.email
+        }
+    }
+
+    func signInWithGoogle() async {
+        await run {
+            let session = try await self.client.auth.signInWithOAuth(provider: .google)
+            self.userId = session.user.id
+            self.email = session.user.email
+        }
+    }
+    #endif
 }
 
 // MARK: - Persistence

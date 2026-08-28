@@ -9,7 +9,7 @@
 
 import Foundation
 import Testing
-@testable import Financial_buddy
+@testable import Headroom
 
 // MARK: - Helpers shared across test structs
 
@@ -221,12 +221,18 @@ struct StatementMergerTests {
     }
 
     @Test func mergesMonthLabels() {
+        // Use fixed dates so the test isn't sensitive to when it runs.
+        // Merger regenerates monthsRead from transaction dates, so the
+        // input monthsRead labels are irrelevant — only the tx dates matter.
+        let cal = Calendar(identifier: .gregorian)
+        let may1 = cal.date(from: DateComponents(year: 2026, month: 5, day: 1))!
+        let jun1 = cal.date(from: DateComponents(year: 2026, month: 6, day: 1))!
         let r1 = ParseResult(
-            transactions: [makeTx(date: dateOffset(months: 2, day: 1), desc: "A", amount: -10)],
-            closingBalance: nil, warnings: [], monthsRead: ["May 2026"])
+            transactions: [makeTx(date: may1, desc: "A", amount: -10)],
+            closingBalance: nil, warnings: [], monthsRead: [])
         let r2 = ParseResult(
-            transactions: [makeTx(date: dateOffset(months: 1, day: 1), desc: "B", amount: -10)],
-            closingBalance: nil, warnings: [], monthsRead: ["Jun 2026"])
+            transactions: [makeTx(date: jun1, desc: "B", amount: -10)],
+            closingBalance: nil, warnings: [], monthsRead: [])
 
         let merged = StatementMerger.merge([r1, r2])
         #expect(merged.monthsRead.count == 2)

@@ -667,7 +667,7 @@ struct StatementImportFlow: View {
             .padding(.top, 16)
             .padding(.bottom, 24)
         }
-        .scrollEdgeEffectStyle(.soft, for: .vertical)
+        .scrollEdgeEffectStyle(.automatic, for: .vertical)
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 20) {
                 FBPrimaryButton(label: "Choose PDF files") { showFilePicker = true }

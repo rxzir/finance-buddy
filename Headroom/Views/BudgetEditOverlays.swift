@@ -161,7 +161,7 @@ struct EditTodayOverlay: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .frame(maxHeight: 240)
-                .scrollEdgeEffectStyle(.soft, for: .vertical)
+                .scrollEdgeEffectStyle(.automatic, for: .vertical)
             }
 
             FBPrimaryButton(label: "Add") {
@@ -285,7 +285,7 @@ struct ManageCommitmentsOverlay: View {
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .frame(maxHeight: 260)
-                .scrollEdgeEffectStyle(.soft, for: .vertical)
+                .scrollEdgeEffectStyle(.automatic, for: .vertical)
             }
 
             FBPrimaryButton(label: "Add") {

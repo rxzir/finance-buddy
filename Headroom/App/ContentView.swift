@@ -309,7 +309,7 @@ struct MainTabShell: View {
             @State private var askHeaderCollapsed = false
             @State private var modal: AppModal?
             let store = HeadroomStore(finances: .sample)
-            
+
             var body: some View {
                 ZStack {
                     FBBackground()

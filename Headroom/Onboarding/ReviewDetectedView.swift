@@ -204,7 +204,7 @@ struct ReviewDetectedView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
             }
-            .scrollEdgeEffectStyle(.soft, for: .vertical)
+            .scrollEdgeEffectStyle(.automatic, for: .vertical)
 
             stepFooter(label: "Next: Bills →") {
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) { reviewStep = 1 }
@@ -273,7 +273,7 @@ struct ReviewDetectedView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
             }
-            .scrollEdgeEffectStyle(.soft, for: .vertical)
+            .scrollEdgeEffectStyle(.automatic, for: .vertical)
 
             stepFooter(
                 label: "Confirm · save \(includedCount) item\(includedCount == 1 ? "" : "s")",
